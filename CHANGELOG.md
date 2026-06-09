@@ -343,3 +343,60 @@ Root-cause analysis of `Expected 1024 bytes, got -1` from the pcap:
   frames are Windows USB stack housekeeping — OUT completion and async read pre-post
   respectively. Android's `bulkTransfer()` handles these transparently; no code
   change needed for them.
+
+---
+
+## [2.2] — 2026-06-09
+
+### Bug fixes — three errors in init command encoding found by re-analysing pcap
+
+All three errors caused the board to silently reject the init sequence, leaving
+it in an uninitialised state where every MeasTrig returned nothing (-1).
+
+- **`payload_len` field wrong** (`sendCmd`): the formula was `4 + params.size * 4`,
+  adding 4 extra bytes. Confirmed from pcap: `payload_len` counts **only** the
+  parameter bytes (`params.size * 4`), not the cmd/npar/rsrv header fields.
+  Verified against every frame: F319 plen=12=3×4 ✓, F331 plen=48=12×4 ✓,
+  F439 plen=20=5×4 ✓. This was the most likely cause of the board rejecting
+  every command silently.
+
+- **RegWrite #2 param[8] wrong**: `0x0006001F` → `0x0006011F` (bit 8 missing).
+  From pcap frame 335 byte-exact decode.
+
+- **CfgFmcw #5 param[2] byte-swapped**: `0x003D0080` → `0x0080003D`.
+  The previous decode read the hex display as big-endian; the actual uint32
+  little-endian value is `0x0080003D`. From pcap frame 367 byte-exact decode.
+
+---
+
+## [2.3] — 2026-06-09
+
+### New features
+
+- **Log level filter chips** (`LogScreen`): a horizontal chip strip above the log
+  list lets you filter by ALL / ERRO / WARN / INFO / DEBU.  Each chip shows the
+  count for that level.  Selecting a chip that is already active clears the
+  filter back to ALL.  Auto-scroll to bottom follows the filtered view.
+
+- **USB cable-removal auto-disconnect** (`TinyRadViewModel`): a
+  `BroadcastReceiver` for `ACTION_USB_DEVICE_DETACHED` is now registered at
+  ViewModel init time.  When the cable is unplugged the receiver calls
+  `usbManager.disconnect()`, stops any in-progress recording, clears streaming
+  state, and sets the error message "Cable disconnected" so the Home screen
+  shows the error state immediately.  The receiver is registered with
+  `RECEIVER_EXPORTED` (required for system broadcasts) and unregistered in
+  `onCleared`.
+
+- **About screen updated**:
+  - ENACT project reference and EU grant language removed
+  - Hardware row updated to "Analog Devices EV-TINYRAD24G" with confirmed
+    VID/PID
+  - Interface row updated to "USB Host — vendor bulk (OTG)"
+  - Added two tappable link rows that open the system browser:
+    - RFSAT Limited → https://www.rfsat.com
+    - TinyRAD Evaluation Board → https://www.analog.com/en/resources/
+      evaluation-hardware-and-software/evaluation-boards-kits/eval-tinyrad.html
+
+- **DEBUG log brightness increased** (`LogRow`): DEBUG message alpha raised from
+  0.45 to 0.78 so messages are clearly readable against the dark background
+  while remaining visually distinct from INFO level.

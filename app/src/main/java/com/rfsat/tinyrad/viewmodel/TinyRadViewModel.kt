@@ -44,9 +44,6 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
     val uiState: StateFlow<TinyRadUiState> = _uiState.asStateFlow()
 
     private var frameSamples = ArrayDeque<Long>(20)
-
-    // Remember the device we requested permission for so we can connect
-    // even if EXTRA_DEVICE comes back null (some ROM quirk).
     private var pendingDevice: UsbDevice? = null
 
     // ── USB permission receiver ───────────────────────────────────────────────
@@ -54,17 +51,11 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
     private val usbPermissionReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
             if (intent.action != ACTION_USB_PERMISSION) return
-
-            // Extract device — prefer intent extra, fall back to remembered device.
-            // IntentCompat handles the API 33 / pre-33 split internally.
             val device: UsbDevice? =
                 IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
                     ?: pendingDevice
-
             val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
-
             AppLog.info("Permission result: granted=$granted device=${device?.deviceName}")
-
             if (granted && device != null) {
                 pendingDevice = null
                 usbManager.connect(device)
@@ -81,17 +72,59 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    // ── USB detach receiver — auto-disconnect when cable is removed ───────────
+    //
+    // ACTION_USB_DEVICE_DETACHED is a system broadcast so it uses RECEIVER_EXPORTED.
+    // It carries the UsbDevice that was removed; we check it matches our connected
+    // device before acting so other USB peripherals don't trigger a disconnect.
+
+    private val usbDetachReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context, intent: Intent) {
+            if (intent.action != UsbManager.ACTION_USB_DEVICE_DETACHED) return
+            val detached: UsbDevice? =
+                IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+            AppLog.info("USB detach event: ${detached?.deviceName ?: "unknown device"}")
+            // Only act if we were connected (state != DISCONNECTED / REQUESTING)
+            val cs = _uiState.value.connectionState
+            if (cs == UsbConnectionState.CONNECTED || cs == UsbConnectionState.CONNECTING) {
+                AppLog.warn("TinyRAD cable removed — disconnecting")
+                if (_uiState.value.isRecording) {
+                    viewModelScope.launch { recRepo.stopRecording() }
+                }
+                usbManager.disconnect()
+                // usbManager.disconnect() fires its own connectionState update,
+                // but also clear streaming flag and reset frame state here
+                _uiState.update {
+                    it.copy(
+                        isStreaming    = false,
+                        isRecording    = false,
+                        currentFrame   = null,
+                        trackedObjects = emptyList(),
+                        frameRate      = 0f,
+                        errorMessage   = "Cable disconnected"
+                    )
+                }
+            }
+        }
+    }
+
     init {
-        // Register the permission receiver with RECEIVER_NOT_EXPORTED on all
-        // API levels via ContextCompat — satisfies the Android U lint requirement
-        // without an API-level branch.  The broadcast is only ever sent by this
-        // app's own PendingIntent so it must never be exported.
-        val filter = IntentFilter(ACTION_USB_PERMISSION)
+        // Permission receiver — private broadcast, must not be exported
+        val permFilter = IntentFilter(ACTION_USB_PERMISSION)
         ContextCompat.registerReceiver(
             application,
             usbPermissionReceiver,
-            filter,
+            permFilter,
             ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+
+        // Detach receiver — system broadcast, must be exported
+        val detachFilter = IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED)
+        ContextCompat.registerReceiver(
+            application,
+            usbDetachReceiver,
+            detachFilter,
+            ContextCompat.RECEIVER_EXPORTED
         )
 
         viewModelScope.launch {
@@ -263,9 +296,8 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
 
     override fun onCleared() {
         super.onCleared()
-        try {
-            getApplication<Application>().unregisterReceiver(usbPermissionReceiver)
-        } catch (_: Exception) {}
+        try { getApplication<Application>().unregisterReceiver(usbPermissionReceiver) } catch (_: Exception) {}
+        try { getApplication<Application>().unregisterReceiver(usbDetachReceiver) }     catch (_: Exception) {}
         usbManager.cleanup()
     }
 }

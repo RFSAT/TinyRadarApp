@@ -307,7 +307,7 @@ class TinyRadUsbManager(private val context: Context) {
         if (!cmdAck(0x9017, 0x0007, intArrayOf(
                 0x00010000, 0x00010000, 0x00070000,
                 0xFFEA0300.toInt(), 0xB9291FFF.toInt(), 0x3E882A20,
-                0xE5204000.toInt(), 0x4827809F, 0x0006001F,
+                0xE5204000.toInt(), 0x4827809F, 0x0006011F,
                 0x80050000.toInt(), 0x000401E2, 0x08030020, 0x06420189,
                 0xEA010002.toInt(), 0xE700FFF5.toInt(), 0x0000809F, 0))) return false
 
@@ -351,7 +351,7 @@ class TinyRadUsbManager(private val context: Context) {
 
         AppLog.info("Init: CfgFmcw #5 (sweep params)…")
         if (!cmdAck(0x9031, 0x0001, intArrayOf(
-                0x00010000, 0x09000000, 0x003D0080, 0x04060000, 0x04160000))) return false
+                0x00010000, 0x09000000, 0x0080003D, 0x04060000, 0x04160000))) return false
 
         AppLog.info("Board init complete")
         return true
@@ -379,7 +379,7 @@ class TinyRadUsbManager(private val context: Context) {
     private fun sendCmd(cmd: Int, reserved: Int, params: IntArray): Int {
         val conn = usbConn ?: return -1
         val buf  = ByteBuffer.allocate(USB_OUT_SIZE).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putShort((4 + params.size * 4).toShort())   // payload_len
+        buf.putShort((params.size * 4).toShort())   // payload_len = parameter bytes only
         buf.putShort(cmd.toShort())
         buf.putShort(params.size.toShort())
         buf.putShort(reserved.toShort())
