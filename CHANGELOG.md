@@ -225,3 +225,40 @@ matching against the wrong VID entirely.
   - `SettingsScreen.kt` — `ArrowBack`
   Added `import androidx.compose.material.icons.automirrored.filled.*` to all
   affected files.
+
+---
+
+## [1.8] — 2026-06-09
+
+### Bug fixes
+
+- **Compile error** (`TinyRadViewModel`, `MainActivity`): `Build` import was
+  removed in v1.7 to eliminate the `if/else` in `registerReceiver`, but
+  `Build.VERSION.SDK_INT` was still used inside the permission receiver and in
+  `handleUsbIntent()` to call `getParcelableExtra`.  Both replaced with
+  `IntentCompat.getParcelableExtra()` which handles the API split internally,
+  removing all remaining uses of `android.os.Build`.
+
+### Protocol corrections — no-frames fix
+
+The previous command codes (0x0001, 0x0002, 0x0004) were guesses.
+Corrected to the reverse-engineered ADI command set used by TinyRadTool:
+
+| Code   | Name         | Action |
+|--------|--------------|--------|
+| 0x9000 | BrdRst       | Board reset / init |
+| 0x9001 | BrdGetSwVers | Request firmware version string |
+| 0x9010 | RfOn         | Enable RF front-end |
+| 0x9021 | MeasStart    | Start continuous measurement |
+| 0x9022 | MeasStop     | Stop measurement |
+
+Additional changes:
+- 500 ms delay after BrdRst (RF front-end needs ~400 ms to stabilise)
+- 200 ms delay after RfOn before triggering
+- Frame sync word corrected to 0x5A 0xA5 (bytes 0–1 of each board→host frame)
+- ADC frame header: sync(2) + cmd_echo(2) + payload_len(4) = 8 bytes
+- ADC dimension detection: tries to infer NChirps/NRx/NSamples from payload
+  size; falls back to default 128×4×256 (fw 3.x default config)
+- RAW_SNIFF_MODE flag: set to `true` in TinyRadUsbManager to disable all
+  commands and log raw receive bytes as hex — useful for comparing with USB
+  traces captured from TinyRadTool on Windows

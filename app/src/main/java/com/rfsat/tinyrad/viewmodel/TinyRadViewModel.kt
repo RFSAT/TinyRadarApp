@@ -9,6 +9,7 @@ import android.content.IntentFilter
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.rfsat.tinyrad.data.models.*
@@ -54,13 +55,11 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
         override fun onReceive(ctx: Context, intent: Intent) {
             if (intent.action != ACTION_USB_PERMISSION) return
 
-            // Extract device — prefer intent extra, fall back to remembered device
-            val device: UsbDevice? = (
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
-                    intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-                else
-                    @Suppress("DEPRECATION") intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
-            ) ?: pendingDevice
+            // Extract device — prefer intent extra, fall back to remembered device.
+            // IntentCompat handles the API 33 / pre-33 split internally.
+            val device: UsbDevice? =
+                IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+                    ?: pendingDevice
 
             val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
 
