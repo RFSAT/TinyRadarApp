@@ -262,3 +262,51 @@ Additional changes:
 - RAW_SNIFF_MODE flag: set to `true` in TinyRadUsbManager to disable all
   commands and log raw receive bytes as hex — useful for comparing with USB
   traces captured from TinyRadTool on Windows
+
+---
+
+## [2.0] — 2026-06-09
+
+### New features — complete protocol implementation from USB trace
+
+USB capture (USB-TinyRAD.pcapng) provided by user was analysed to extract
+the exact wire protocol used by TinyRadTool communicating with firmware R 3.0.3.
+
+**Command frame format (confirmed):**
+```
+uint16  payload_len   (bytes after this field)
+uint16  cmd_code      (0x9xxx)
+uint16  num_params
+uint16  reserved      (0x0001 for config cmds, 0x0007 for register writes)
+uint32  params[N]
+<zero pad to 2048 bytes>
+```
+
+**ACK frame format (confirmed):**
+```
+uint16  cmd_echo
+uint16  status        (0x0002 = OK)
+uint32  result
+```
+
+**ADC data frame (confirmed, 1024 bytes per chirp):**
+```
+uint16  chirp_index × 4   (same value repeated for each Rx channel)
+int16   IQ[508]            Rx0_I Rx0_Q Rx1_I Rx1_Q Rx2_I Rx2_Q Rx3_I Rx3_Q
+                           × 127 samples per channel
+```
+
+**Confirmed command sequence:**
+1. `0x9030` BrdInit — params `[0, 0x02000000, 0]`
+2. `0x900E` RfBrdSet — params `[0x00010000, 0x02000000]`
+3. `0x9031` CfgFmcw ×5 — FMCW timing and geometry config blocks
+4. `0x9017` RegWrite ×4 — hardware register initialisation
+5. `0x9032` MeasTrig — trigger one chirp; repeats 80× per FMCW frame
+   - Each trigger: board sends 1024-byte ADC frame then 8-byte ACK
+6. `0x9031` with zero params — stop measurement
+
+**Measurement geometry (confirmed):**
+- 80 chirps per FMCW frame (chirp_idx: 0, 2, 4 … 158)
+- 4 Rx channels, 127 complex samples per chirp per channel
+- Range resolution: c/(2×250 MHz) ≈ 0.6 m
+- All 4 Rx channels stored; Rx0 used for range-Doppler processing (MIMO DBF planned)

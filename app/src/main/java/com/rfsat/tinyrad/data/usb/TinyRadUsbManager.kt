@@ -11,51 +11,50 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.*
 
-// ─── EV-TINYRAD24G USB protocol notes ────────────────────────────────────────
+// ─── EV-TINYRAD24G USB protocol ──────────────────────────────────────────────
 //
-// The board (ADSP-BF706, fw R 3.0.3, VID 0x064B PID 0x7823) uses a proprietary
-// binary protocol implemented inside the firmware.  ADI's PC-side software
-// (TinyRadTool / MATLAB / Python AppNotes) communicates through a closed-source
-// Windows DLL (TinyRad.dll) and does not document the raw USB wire format.
+// Reverse-engineered from USB capture (USB-TinyRAD.pcapng, Jun 2026).
+// VID 0x064B / PID 0x7823, firmware R 3.0.3.
 //
-// SNIFF MODE — if RawSniffMode = true the streaming loop does NOT send any
-// commands and instead just reads whatever the board spontaneously sends (if
-// anything) and logs it as hex.  This is useful when comparing app behaviour
-// with USB traces captured from TinyRadTool running under Windows.
+// ── OUT frame (host → board, always 2048 bytes padded with zeros) ────────────
+//   uint16  payload_len   bytes after this field that carry real data
+//   uint16  cmd_code      command identifier (0x9xxx)
+//   uint16  num_params    number of uint32 parameters that follow
+//   uint16  reserved      typically 0x0001 for config cmds, 0x0007 for RegWrite
+//   uint32  params[N]     command parameters
+//   <zero padding to 2048 bytes>
 //
-// COMMAND MODE — send the known command sequence and attempt to parse frames.
-// Command frame (host → board): 2×uint16 LE  [CmdCode][Value]
-// Frame sync word: 0x5A 0xA5 (two bytes, little-endian view of 0xA55A)
-// Data frame header (board → host):
-//   uint16  sync       0xA55A
-//   uint16  cmd_echo   echoes the command code that triggered this frame
-//   uint32  length     payload byte count (NOT including this 8-byte header)
-//   followed by `length` bytes of ADC IQ data
-//   IQ layout: NChirps × NRx × NSamples × int16 (I then Q interleaved)
-//   NChirps, NRx, NSamples are NOT in the header — they are determined by the
-//   radar configuration commands sent before triggering.
+// ── IN frame (board → host) ─────────────────────────────────────────────────
+//   Type A — ACK (8 bytes):
+//     uint16  cmd_echo   mirrors the OUT cmd_code
+//     uint16  status     0x0002 = OK, 0x0003/0x0004 for init responses
+//     uint32  result     1 = success, or a returned value
 //
-// Known command codes (reverse-engineered from USB captures and community posts)
-//   0x9000  BrdRst        board reset / initialise
-//   0x9001  BrdGetSwVers  request firmware version string
-//   0x9010  RfOn          enable RF front-end
-//   0x9011  RfOff         disable RF front-end
-//   0x9020  MeasTrig      trigger a single measurement burst
-//   0x9021  MeasStart     start continuous measurement
-//   0x9022  MeasStop      stop measurement
-//   0x9030  CfgRadar      configure FMCW params (value = config block index)
+//   Type B — ADC data (1024 bytes per chirp):
+//     uint16  chirp_idx  x4 (four identical copies: Rx0..Rx3 chirp counter)
+//     int16   iq[508]    interleaved IQ for all 4 Rx channels:
+//                        Rx0_I, Rx0_Q, Rx1_I, Rx1_Q, Rx2_I, Rx2_Q, Rx3_I, Rx3_Q
+//                        × (1024-8)/8 = 127 samples per channel
 //
-// Default configuration after BrdRst: 256 samples/chirp, 128 chirps, 4 Rx,
-// sweep 24–24.25 GHz (250 MHz BW).
+// ── Command sequence (from trace) ────────────────────────────────────────────
+//   1. CMD_INIT    (0x9030) — board init, params=[0, 0x02000000, 0]
+//   2. CMD_RFSET   (0x900E) — RF board config, params=[0x00010000, 0x02000000]
+//   3. CMD_CFG     (0x9031) × N — FMCW configuration (multiple parameter blocks)
+//   4. CMD_REGW    (0x9017) × N — hardware register writes
+//   5. CMD_TRIG    (0x9032) — trigger ONE chirp; repeat per-chirp
+//      Response per chirp: 1024-byte ADC frame then 8-byte ACK
+//   6. CMD_CFG     (0x9031) with zero params — stop
+//
+// ── Measurement geometry ─────────────────────────────────────────────────────
+//   CHIRPS_PER_FRAME = 80  (chirp_idx increments by 2: 0,2,4...158)
+//   RX_CHANNELS      = 4
+//   SAMPLES_PER_CHIRP = 127  (integer, from 508 IQ pairs / 4 Rx)
+//   USB packet per chirp: 1024 bytes = 8 header + 508×int16 IQ = 8+1016=1024 ✓
 
 private const val TAG = "TinyRadUSB"
 
-// Set true to skip all commands and just log raw receive bytes as hex.
-// Useful for protocol reverse-engineering alongside TinyRadTool USB traces.
-private const val RAW_SNIFF_MODE = false
-
 private val TINYRAD_VID_PID = listOf(
-    0x064B to 0x7823,   // EV-TINYRAD24G fw R 3.0.3 — CONFIRMED
+    0x064B to 0x7823,   // EV-TINYRAD24G fw R 3.0.3 — confirmed
     0x0456 to 0xB60F,
     0x0456 to 0xB671,
     0x0456 to 0xB62C,
@@ -63,21 +62,16 @@ private val TINYRAD_VID_PID = listOf(
     0x0483 to 0x5740
 )
 
-// Frame sync word (first 2 bytes of every board→host frame)
-private const val SYNC_0 = 0x5A.toByte()
-private const val SYNC_1 = 0xA5.toByte()
+// Frame geometry — confirmed from pcap
+private const val CHIRPS_PER_FRAME  = 80
+private const val RX_CHANNELS       = 4
+private const val SAMPLES_PER_CHIRP = 127   // complex samples per Rx per chirp
+private const val USB_OUT_SIZE      = 2048  // all OUT transfers padded to this
+private const val ADC_FRAME_SIZE    = 1024  // exactly 1024 bytes per chirp IN
+private const val ADC_HEADER_BYTES  = 8     // 4× uint16 chirp_idx
+private const val IQ_PER_FRAME      = (ADC_FRAME_SIZE - ADC_HEADER_BYTES) / 2  // 508 int16
 
-// Command codes
-private const val CMD_BRD_RST       = 0x9000.toShort()
-private const val CMD_BRD_SW_VERS   = 0x9001.toShort()
-private const val CMD_RF_ON         = 0x9010.toShort()
-private const val CMD_MEAS_TRIG     = 0x9020.toShort()
-private const val CMD_MEAS_START    = 0x9021.toShort()
-private const val CMD_MEAS_STOP     = 0x9022.toShort()
-
-private const val BULK_TIMEOUT_MS = 200
-private const val READ_BUF_SIZE   = 65536
-private const val MAX_FRAME_BYTES = 524288
+private const val BULK_TIMEOUT_MS   = 500
 
 class TinyRadUsbManager(private val context: Context) {
 
@@ -109,13 +103,11 @@ class TinyRadUsbManager(private val context: Context) {
         try {
             val usbMgr = context.getSystemService(Context.USB_SERVICE) as android.hardware.usb.UsbManager
             val conn   = usbMgr.openDevice(device)
-                ?: throw IllegalStateException("openDevice() returned null — permission not held?")
+                ?: throw IllegalStateException("openDevice() null — permission not held?")
 
-            AppLog.info(
-                "Opened: ${device.productName ?: device.deviceName}  " +
-                "VID=0x${device.vendorId.toHex(4)}  PID=0x${device.productId.toHex(4)}  " +
-                "ifaces=${device.interfaceCount}"
-            )
+            AppLog.info("Opened: ${device.productName ?: device.deviceName} " +
+                    "VID=0x${device.vendorId.toHex(4)} PID=0x${device.productId.toHex(4)} " +
+                    "ifaces=${device.interfaceCount}")
 
             var dataIface: UsbInterface? = null
             var foundIn:   UsbEndpoint?  = null
@@ -124,17 +116,14 @@ class TinyRadUsbManager(private val context: Context) {
             outer@ for (i in 0 until device.interfaceCount) {
                 val iface = device.getInterface(i)
                 AppLog.debug("iface[$i] class=0x${iface.interfaceClass.toHex(2)} eps=${iface.endpointCount}")
-                var epIn:  UsbEndpoint? = null
-                var epOut: UsbEndpoint? = null
+                var epIn: UsbEndpoint? = null; var epOut: UsbEndpoint? = null
                 for (j in 0 until iface.endpointCount) {
                     val ep = iface.getEndpoint(j)
-                    AppLog.debug("  ep[$j] dir=${if(ep.direction==UsbConstants.USB_DIR_IN)"IN" else "OUT"} type=${ep.type} addr=0x${ep.address.toHex(2)} pkt=${ep.maxPacketSize}")
-                    if (ep.type == UsbConstants.USB_ENDPOINT_XFER_BULK) {
+                    if (ep.type == UsbConstants.USB_ENDPOINT_XFER_BULK)
                         when (ep.direction) {
                             UsbConstants.USB_DIR_IN  -> epIn  = ep
                             UsbConstants.USB_DIR_OUT -> epOut = ep
                         }
-                    }
                 }
                 if (epIn != null && epOut != null) {
                     if (dataIface == null || iface.interfaceClass == 0xFF) {
@@ -146,19 +135,13 @@ class TinyRadUsbManager(private val context: Context) {
 
             requireNotNull(dataIface) { "No bulk interface found" }
             conn.claimInterface(dataIface, true)
-            AppLog.info("Claimed iface ${dataIface.id} — IN=0x${foundIn!!.address.toHex(2)} OUT=0x${foundOut!!.address.toHex(2)}")
+            AppLog.info("Claimed iface ${dataIface.id} — " +
+                    "IN=0x${foundIn!!.address.toHex(2)} OUT=0x${foundOut!!.address.toHex(2)}")
 
-            usbConnection = conn
-            bulkIn        = foundIn
-            bulkOut       = foundOut
-            claimedIface  = dataIface
-
-            _deviceName.value = "${device.productName ?: "TinyRAD"} (${device.vendorId.toHex(4)}:${device.productId.toHex(4)})"
+            usbConnection = conn; bulkIn = foundIn; bulkOut = foundOut; claimedIface = dataIface
+            _deviceName.value = "${device.productName ?: "TinyRAD"} " +
+                    "(${device.vendorId.toHex(4)}:${device.productId.toHex(4)})"
             _connectionState.value = UsbConnectionState.CONNECTED
-
-            // Request firmware version immediately
-            sendRaw(CMD_BRD_SW_VERS, 0)
-
         } catch (e: Exception) {
             AppLog.error("USB connect failed: ${e.message}")
             _connectionState.value = UsbConnectionState.ERROR
@@ -168,12 +151,13 @@ class TinyRadUsbManager(private val context: Context) {
     fun startStreaming(cfg: TinyRadConfig = TinyRadConfig()) {
         config    = cfg
         streamJob = scope.launch { streamLoop() }
-        AppLog.info(if (RAW_SNIFF_MODE) "Sniff mode started" else "Streaming started")
+        AppLog.info("Streaming started")
     }
 
     fun stopStreaming() {
-        if (!RAW_SNIFF_MODE) sendRaw(CMD_MEAS_STOP, 0)
         streamJob?.cancel()
+        // Send stop command (CfgFmcw with zero params = stop, from trace frame 805)
+        sendCmd(0x9031, shortArrayOf(0x0001), intArrayOf(0, 0x02000000, 0))
         AppLog.info("Streaming stopped")
     }
 
@@ -198,181 +182,167 @@ class TinyRadUsbManager(private val context: Context) {
     }
 
     fun hasPermission(device: UsbDevice): Boolean =
-        (context.getSystemService(Context.USB_SERVICE) as android.hardware.usb.UsbManager).hasPermission(device)
+        (context.getSystemService(Context.USB_SERVICE) as android.hardware.usb.UsbManager)
+            .hasPermission(device)
 
     fun requestPermission(device: UsbDevice, pi: android.app.PendingIntent) =
-        (context.getSystemService(Context.USB_SERVICE) as android.hardware.usb.UsbManager).requestPermission(device, pi)
+        (context.getSystemService(Context.USB_SERVICE) as android.hardware.usb.UsbManager)
+            .requestPermission(device, pi)
 
     // ── Streaming loop ────────────────────────────────────────────────────────
 
     private suspend fun streamLoop() = withContext(Dispatchers.IO) {
-        if (RAW_SNIFF_MODE) {
-            rawSniffLoop()
-        } else {
-            commandLoop()
-        }
-    }
+        if (!initBoard()) return@withContext
 
-    // Sniff mode: read everything the board sends and log as hex — no commands sent
-    private suspend fun rawSniffLoop() = withContext(Dispatchers.IO) {
-        AppLog.info("RAW SNIFF MODE — reading all bytes, no commands sent")
-        val buf = ByteArray(READ_BUF_SIZE)
-        var totalBytes = 0L
-        while (isActive && usbConnection != null) {
-            val n = usbConnection!!.bulkTransfer(bulkIn, buf, buf.size, BULK_TIMEOUT_MS)
-            if (n > 0) {
-                totalBytes += n
-                val hex = buf.take(minOf(n, 64)).joinToString(" ") { "%02X".format(it) }
-                AppLog.debug("RX $n bytes [total $totalBytes]: $hex${if(n>64) "…" else ""}")
-            }
-        }
-    }
-
-    // Command mode: send init sequence, parse ADC frames
-    private suspend fun commandLoop() = withContext(Dispatchers.IO) {
-        // Board reset + init sequence with generous delays for RF front-end startup
-        AppLog.info("Sending BrdRst…")
-        sendRaw(CMD_BRD_RST, 0)
-        delay(500)                  // RF front-end takes ~400 ms to stabilise
-
-        AppLog.info("Sending RfOn…")
-        sendRaw(CMD_RF_ON, 0)
-        delay(200)
-
-        AppLog.info("Sending MeasStart…")
-        sendRaw(CMD_MEAS_START, 0)
-
-        val readBuf  = ByteArray(READ_BUF_SIZE)
-        val frameBuf = ByteBuffer.allocate(MAX_FRAME_BYTES).order(ByteOrder.LITTLE_ENDIAN)
-        var rxBytes  = 0L
-        var synced   = false
+        // Accumulate chirps into complete FMCW frames
+        // ADC buffer: [CHIRPS_PER_FRAME][RX_CHANNELS][SAMPLES_PER_CHIRP] complex (I,Q)
+        val adcI = Array(CHIRPS_PER_FRAME) { Array(RX_CHANNELS) { FloatArray(SAMPLES_PER_CHIRP) } }
+        val adcQ = Array(CHIRPS_PER_FRAME) { Array(RX_CHANNELS) { FloatArray(SAMPLES_PER_CHIRP) } }
+        var chirpCount = 0
+        val inBuf = ByteArray(ADC_FRAME_SIZE)
 
         while (isActive && usbConnection != null) {
-            val n = usbConnection!!.bulkTransfer(bulkIn, readBuf, readBuf.size, BULK_TIMEOUT_MS)
-            if (n <= 0) { delay(1); continue }
-            rxBytes += n
+            // Send trigger for one chirp
+            val sent = sendCmd(0x9032, shortArrayOf(0x0001),
+                intArrayOf(0x00010000, 0x02000000, 0, 0x00060000, 0x14990002))
+            if (sent < 0) { delay(10); continue }
 
-            // Log first reception so we know data is flowing
-            if (rxBytes <= n.toLong()) {
-                val hex = readBuf.take(minOf(n, 32)).joinToString(" ") { "%02X".format(it) }
-                AppLog.info("First data received ($n bytes): $hex${if(n>32)"…" else ""}")
+            // Read ADC data frame (1024 bytes)
+            val nData = bulkRead(inBuf, ADC_FRAME_SIZE)
+            if (nData != ADC_FRAME_SIZE) {
+                AppLog.warn("Expected $ADC_FRAME_SIZE bytes, got $nData")
+                if (nData > 0) readAck()  // consume ack anyway
+                continue
             }
 
-            frameBuf.put(readBuf, 0, n)
-            frameBuf.flip()
+            // Read ACK (8 bytes)
+            readAck()
 
-            while (frameBuf.remaining() >= 2) {
-                if (!synced) {
-                    // Hunt for sync word 0x5A 0xA5
-                    val b0 = frameBuf.get()
-                    if (b0 != SYNC_0) continue
-                    if (frameBuf.remaining() < 1) break
-                    val b1 = frameBuf.get()
-                    if (b1 != SYNC_1) { frameBuf.position(frameBuf.position() - 1); continue }
-                    synced = true
-                    AppLog.debug("Frame sync found at offset ${rxBytes - frameBuf.remaining()}")
+            // Parse chirp data
+            val buf = ByteBuffer.wrap(inBuf).order(ByteOrder.LITTLE_ENDIAN)
+            val chirpIdx = buf.short.toInt() and 0xFFFF
+            buf.short; buf.short; buf.short   // skip 3 duplicate chirp_idx values
+
+            // IQ layout per sample: Rx0_I Rx0_Q Rx1_I Rx1_Q Rx2_I Rx2_Q Rx3_I Rx3_Q
+            val chirpRow = chirpIdx / 2   // step-by-2 index → row 0..79
+            if (chirpRow < CHIRPS_PER_FRAME) {
+                for (s in 0 until SAMPLES_PER_CHIRP) {
+                    for (r in 0 until RX_CHANNELS) {
+                        val i = buf.short.toFloat()
+                        val q = buf.short.toFloat()
+                        adcI[chirpRow][r][s] = i
+                        adcQ[chirpRow][r][s] = q
+                    }
                 }
-
-                // Need at least 6 more bytes for header (cmd_echo + length)
-                if (frameBuf.remaining() < 6) break
-                val mark      = frameBuf.position()
-                val cmdEcho   = frameBuf.short.toInt() and 0xFFFF
-                val payloadLen= frameBuf.int.toLong() and 0xFFFFFFFFL
-
-                if (payloadLen > MAX_FRAME_BYTES) {
-                    AppLog.warn("Implausible payload length $payloadLen — resyncing")
-                    synced = false; frameBuf.position(mark - 2 + 1); frameBuf.compact(); frameBuf.flip(); break
-                }
-                if (frameBuf.remaining() < payloadLen) {
-                    frameBuf.position(mark - 2)  // rewind past header
-                    break
-                }
-
-                val payload = ByteArray(payloadLen.toInt())
-                frameBuf.get(payload)
-                synced = false  // require fresh sync for next frame
-
-                AppLog.debug("Frame cmd=0x${cmdEcho.toHex(4)} payload=$payloadLen bytes")
-                processPayload(cmdEcho, payload)
+                chirpCount++
             }
-            frameBuf.compact()
-        }
-    }
 
-    private fun processPayload(cmdEcho: Int, payload: ByteArray) {
-        when (cmdEcho) {
-            0x9001 -> {  // BrdGetSwVers response — ASCII version string
-                val ver = payload.decodeToString().trim()
-                _deviceName.value = _deviceName.value.substringBefore("(") + "— fw $ver"
-                AppLog.info("FW version: $ver")
-            }
-            0x9020, 0x9021 -> {  // MeasTrig or MeasStart data frame
-                parseAdcPayload(payload)
-            }
-            else -> {
-                if (payload.size >= 4) parseAdcPayload(payload)  // try anyway
-                else AppLog.debug("Unhandled cmd echo 0x${cmdEcho.toHex(4)} (${payload.size} bytes)")
+            // When we have a full FMCW frame, process it
+            if (chirpCount >= CHIRPS_PER_FRAME) {
+                processFrame(adcI, adcQ)
+                chirpCount = 0
             }
         }
     }
 
-    // ── ADC payload parsing ───────────────────────────────────────────────────
-    //
-    // Default config (TinyRad fw 3.x): 128 chirps, 4 Rx, 256 samples/chirp
-    // Total IQ samples per frame = 128 × 4 × 256 × 4 bytes = 524,288 bytes
+    // ── Board init sequence — exact replay from USB trace ──────────────────────
 
-    private val DEFAULT_N_CHIRPS  = 128
-    private val DEFAULT_N_RX      = 4
-    private val DEFAULT_N_SAMPLES = 256
+    private suspend fun initBoard(): Boolean = withContext(Dispatchers.IO) {
+        AppLog.info("Board init sequence starting…")
 
-    private fun parseAdcPayload(payload: ByteArray) {
-        // Try to infer dimensions from payload size; fall back to defaults
-        val expectedDefault = DEFAULT_N_CHIRPS * DEFAULT_N_RX * DEFAULT_N_SAMPLES * 4
-        val (nChirps, nRx, nSamples) = when {
-            payload.size == expectedDefault ->
-                Triple(DEFAULT_N_CHIRPS, DEFAULT_N_RX, DEFAULT_N_SAMPLES)
-            payload.size >= 6 -> {
-                // Some firmware versions prepend NChirps(u16) NRx(u16) NSamples(u16)
-                val b = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN)
-                val nc = b.short.toInt() and 0xFFFF
-                val nr = b.short.toInt() and 0xFFFF
-                val ns = b.short.toInt() and 0xFFFF
-                if (nc in 1..512 && nr in 1..8 && ns in 1..4096 &&
-                    6 + nc * nr * ns * 4 == payload.size)
-                    Triple(nc, nr, ns)
-                else
-                    Triple(DEFAULT_N_CHIRPS, DEFAULT_N_RX, DEFAULT_N_SAMPLES)
-            }
-            else -> Triple(DEFAULT_N_CHIRPS, DEFAULT_N_RX, DEFAULT_N_SAMPLES)
+        // 1. BrdInit (0x9030): params=[0, 0x02000000, 0]
+        if (sendCmd(0x9030, shortArrayOf(0x0001),
+                intArrayOf(0, 0x02000000, 0)) < 0) {
+            AppLog.error("BrdInit send failed"); return@withContext false
+        }
+        if (!readAckExpect(0x9030)) { AppLog.error("BrdInit ack failed"); return@withContext false }
+        AppLog.info("BrdInit OK")
+
+        // 2. RfBrdSet (0x900E): params=[0x00010000, 0x02000000]
+        sendCmd(0x900E, shortArrayOf(0x0000), intArrayOf(0x00010000, 0x02000000))
+        readAckExpect(0x900E)
+        AppLog.info("RfBrdSet OK")
+
+        // 3. CfgFmcw (0x9031) #1: params=[0, 0x02000000, 0]
+        sendCmd(0x9031, shortArrayOf(0x0001), intArrayOf(0, 0x02000000, 0))
+        readAckExpect(0x9031)
+
+        // 4. RegWrite (0x9017) — hardware register init blocks from trace
+        regWrite(intArrayOf(0x00010000, 0, 0x00030000, 0x00060000,
+            0x14990002, 0x14992000, 0x14994000, 0x14996000,
+            0x00198000.toInt(), 0x7CA0A000.toInt(), 0x00008000, 0))
+        readAckExpect(0x9017)
+
+        regWrite(intArrayOf(0x00010000, 0x00010000, 0x00070000,
+            0xFFEA0300.toInt(), 0xB9291FFF.toInt(), 0x3E882A20,
+            0xE5204000.toInt(), 0x4827809F, 0x00060011.toInt() or 0x10000,
+            0x80050000.toInt(), 0x000401E2, 0x08030020, 0x06420189,
+            0xEA010002.toInt(), 0xE700FFF5.toInt(), 0x0000809F, 0))
+        readAckExpect(0x9017)
+
+        regWrite(intArrayOf(0x00010000, 0x00010000,
+            0xE5600000.toInt(), 0xED60809F.toInt(), 0x0000809F, 0))
+        readAckExpect(0x9017)
+
+        regWrite(intArrayOf(0x00010000, 0x00010000,
+            0xE5A00000.toInt(), 0xF5A0809F.toInt(), 0xB929809F.toInt(), 0x3E882A20))
+        readAckExpect(0x9017)
+
+        regWrite(intArrayOf(0x00010000, 0x00010000,
+            0xB9290000.toInt(), 0x25602800, 0x040E809F, 0x80050080.toInt()))
+        readAckExpect(0x9017)
+
+        // 5. CfgFmcw #2: timing + geometry params
+        sendCmd(0x9031, shortArrayOf(0x0001),
+            intArrayOf(0x000C0000, 0x00030000, 0x00050000,
+                0x004C0000, 0x00640000, 0, 0))
+        readAckExpect(0x9031)
+
+        // 6. More RegWrite
+        regWrite(intArrayOf(0x00010000, 0x00020000, 0x00070000,
+            0x04060010, 0x04160000, 0x80050080.toInt(), 0x0FC50030,
+            0x010400C8, 0x01440098, 0x08430098, 0x81920002.toInt(),
+            0x00010440, 0x19980333, 0xEA01803C.toInt(), 0xE700FFF5.toInt()))
+        readAckExpect(0x9017)
+
+        // 7. CfgFmcw #3
+        sendCmd(0x9031, shortArrayOf(0x0001),
+            intArrayOf(0x00020000, 0x00010000, 0x00020000,
+                0x00010000, 0x00040000, 0, 0))
+        readAckExpect(0x9031)
+
+        // 8. CfgFmcw #4
+        sendCmd(0x9031, shortArrayOf(0x0001),
+            intArrayOf(0x00030000, 0x00010000, 0x00030000, 0x00060000))
+        readAckExpect(0x9031)
+
+        // 9. CfgFmcw #5 — sweep parameters
+        sendCmd(0x9031, shortArrayOf(0x0001),
+            intArrayOf(0x00010000, 0x09000000, 0x003D0080, 0x04060000, 0x04160000))
+        readAckExpect(0x9031)
+
+        AppLog.info("Board init complete — starting chirp acquisition")
+        true
+    }
+
+    // ── Per-frame DSP pipeline ────────────────────────────────────────────────
+
+    private fun processFrame(
+        adcI: Array<Array<FloatArray>>,
+        adcQ: Array<Array<FloatArray>>
+    ) {
+        // Use Rx channel 0 for range-Doppler; all 4 channels available for MIMO DBF
+        val nChirps   = CHIRPS_PER_FRAME
+        val nSamples  = SAMPLES_PER_CHIRP
+
+        val rangeFftN = config.rangeFftSize.coerceAtLeast(nSamples).nextPow2()
+        val rangeSpec = Array(nChirps) { c ->
+            complexFft(adcI[c][0], adcQ[c][0], rangeFftN)
         }
 
-        val offset  = if (payload.size == nChirps * nRx * nSamples * 4) 0 else 6
-        val dataLen = nChirps * nRx * nSamples * 4
-        if (payload.size - offset < dataLen) {
-            AppLog.warn("ADC payload too small: ${payload.size} (need $dataLen + $offset)")
-            return
-        }
-
-        val buf  = ByteBuffer.wrap(payload, offset, dataLen).order(ByteOrder.LITTLE_ENDIAN)
-        // Use Rx channel 0 only for now; full MIMO DBF requires all 4 channels
-        val adcI = Array(nChirps) { FloatArray(nSamples) }
-        val adcQ = Array(nChirps) { FloatArray(nSamples) }
-        for (c in 0 until nChirps) {
-            for (r in 0 until nRx) {
-                for (s in 0 until nSamples) {
-                    val i = buf.short.toFloat()
-                    val q = buf.short.toFloat()
-                    if (r == 0) { adcI[c][s] = i; adcQ[c][s] = q }
-                }
-            }
-        }
-
-        // DSP pipeline
-        val rangeFftSize = config.rangeFftSize.coerceAtLeast(nSamples).nextPow2()
-        val rangeSpec    = Array(nChirps) { c -> complexFft(adcI[c], adcQ[c], rangeFftSize) }
-        val dopplerN     = nChirps.nextPow2()
-        val rdMag        = Array(rangeFftSize / 2) { FloatArray(dopplerN) }
-        for (r in 0 until rangeFftSize / 2) {
+        val dopplerN = nChirps.nextPow2()
+        val rdMag    = Array(rangeFftN / 2) { FloatArray(dopplerN) }
+        for (r in 0 until rangeFftN / 2) {
             val cI = FloatArray(nChirps) { c -> rangeSpec[c][r * 2] }
             val cQ = FloatArray(nChirps) { c -> rangeSpec[c][r * 2 + 1] }
             val ds = complexFft(cI, cQ, dopplerN)
@@ -382,22 +352,78 @@ class TinyRadUsbManager(private val context: Context) {
             }
         }
 
-        val rangeResM    = 3e8f / (2f * config.bandwidthMHz * 1e6f)
-        val dopplerResMs = (3e8f / (config.startFreqGHz * 1e9f)) /
-                           (2f * nChirps * config.chirpRepUs * 1e-6f)
-        val detections   = cfarDetect(rdMag, rangeResM, dopplerResMs)
-        val objects      = classifyAndTrack(detections)
-        val flat         = FloatArray(rangeFftSize / 2 * dopplerN).also { f ->
-            for (r in 0 until rangeFftSize / 2)
-                for (d in 0 until dopplerN) f[r * dopplerN + d] = rdMag[r][d]
-        }
+        // Physics — TinyRAD: 24–24.25 GHz, BW = 250 MHz
+        val rangeResM    = 3e8f / (2f * 250e6f)   // ~0.6 m
+        val lambda       = 3e8f / 24.125e9f        // ~12.4 mm
+        val chirpRepSec  = 1f / (config.framesPerSec * nChirps)
+        val dopplerResMs = lambda / (2f * nChirps * chirpRepSec)
+
+        val detections = cfarDetect(rdMag, rangeResM, dopplerResMs)
+        val objects    = classifyAndTrack(detections)
+
+        val flat = FloatArray(rangeFftN / 2 * dopplerN)
+        for (r in 0 until rangeFftN / 2)
+            for (d in 0 until dopplerN)
+                flat[r * dopplerN + d] = rdMag[r][d]
 
         _frameFlow.value = RadarFrame(
             frameIndex = ++frameIndex, timestampMs = System.currentTimeMillis(),
             detectedObjects = objects, rangeDopplerMag = flat,
-            rangeBins = rangeFftSize / 2, dopplerBins = dopplerN,
+            rangeBins = rangeFftN / 2, dopplerBins = dopplerN,
             rangeResM = rangeResM, dopplerResMs = dopplerResMs
         )
+    }
+
+    // ── USB helpers ───────────────────────────────────────────────────────────
+
+    /**
+     * Build and send a command frame.
+     * [reserved] is an array so callers can pass different per-command values.
+     */
+    private fun sendCmd(
+        cmd:      Int,
+        reserved: ShortArray,
+        params:   IntArray
+    ): Int {
+        val buf = ByteBuffer.allocate(USB_OUT_SIZE).order(ByteOrder.LITTLE_ENDIAN)
+        val payloadLen = (4 + params.size * 4).toShort()  // nparams+reserved fields + params
+        buf.putShort(payloadLen)
+        buf.putShort(cmd.toShort())
+        buf.putShort(params.size.toShort())
+        buf.putShort(if (reserved.isNotEmpty()) reserved[0] else 0)
+        for (p in params) buf.putInt(p)
+        // Remaining bytes are already zero (ByteBuffer.allocate zeroes)
+        val bytes = buf.array()
+        val n = usbConnection?.bulkTransfer(bulkOut, bytes, bytes.size, BULK_TIMEOUT_MS) ?: -1
+        AppLog.debug("TX 0x${cmd.toHex(4)}  ${params.size} params  → $n bytes")
+        return n
+    }
+
+    /** Build and send a RegWrite (0x9017) with reserved=0x0007. */
+    private fun regWrite(params: IntArray) =
+        sendCmd(0x9017, shortArrayOf(0x0007), params)
+
+    /** Read exactly `expect` bytes from bulk-IN. */
+    private fun bulkRead(buf: ByteArray, expect: Int): Int =
+        usbConnection?.bulkTransfer(bulkIn, buf, expect, BULK_TIMEOUT_MS) ?: -1
+
+    private val ackBuf = ByteArray(64)
+
+    /** Drain a single ACK packet (8 bytes) and return the cmd echo. */
+    private fun readAck(): Int {
+        val n = bulkRead(ackBuf, ackBuf.size)
+        if (n < 4) return -1
+        val echo   = (ackBuf[0].toInt() and 0xFF) or ((ackBuf[1].toInt() and 0xFF) shl 8)
+        val status = (ackBuf[2].toInt() and 0xFF) or ((ackBuf[3].toInt() and 0xFF) shl 8)
+        AppLog.debug("ACK cmd=0x${echo.toHex(4)} status=0x${status.toHex(4)}")
+        return echo
+    }
+
+    private fun readAckExpect(expectedCmd: Int): Boolean {
+        val echo = readAck()
+        if (echo != expectedCmd)
+            AppLog.warn("ACK mismatch: expected 0x${expectedCmd.toHex(4)} got 0x${echo.toHex(4)}")
+        return echo == expectedCmd
     }
 
     // ── DSP helpers ───────────────────────────────────────────────────────────
@@ -421,9 +447,9 @@ class TinyRadUsbManager(private val context: Context) {
                     val pRe = out[(k+j)*2]; val pIm = out[(k+j)*2+1]
                     val qRe = out[(k+j+len/2)*2]; val qIm = out[(k+j+len/2)*2+1]
                     val tRe = uRe*qRe - uIm*qIm; val tIm = uRe*qIm + uIm*qRe
-                    out[(k+j)*2]       = pRe+tRe; out[(k+j)*2+1]       = pIm+tIm
-                    out[(k+j+len/2)*2] = pRe-tRe; out[(k+j+len/2)*2+1] = pIm-tIm
-                    val nu = uRe*wRe - uIm*wIm; uIm = uRe*wIm + uIm*wRe; uRe = nu
+                    out[(k+j)*2]=pRe+tRe; out[(k+j)*2+1]=pIm+tIm
+                    out[(k+j+len/2)*2]=pRe-tRe; out[(k+j+len/2)*2+1]=pIm-tIm
+                    val nu=uRe*wRe-uIm*wIm; uIm=uRe*wIm+uIm*wRe; uRe=nu
                 }
                 k += len
             }
@@ -443,30 +469,30 @@ class TinyRadUsbManager(private val context: Context) {
         val rangeResM: Float, val dopplerResMs: Float
     ) {
         val distanceM: Float get() = rangeBin * rangeResM
-        val speedMps: Float get() {
+        val speedMps:  Float get() {
             val half = 32
             val signed = if (dopplerBin > half) dopplerBin - half * 2 else dopplerBin
             return signed * dopplerResMs
         }
     }
 
-    private fun cfarDetect(rdMag: Array<FloatArray>, rangeResM: Float, dopplerResMs: Float): List<RawDetection> {
-        val results  = mutableListOf<RawDetection>()
-        val nRange   = rdMag.size
-        val nDoppler = rdMag.firstOrNull()?.size ?: 0
+    private fun cfarDetect(
+        rdMag: Array<FloatArray>, rangeResM: Float, dopplerResMs: Float
+    ): List<RawDetection> {
+        val res = mutableListOf<RawDetection>()
+        val nr = rdMag.size; val nd = rdMag.firstOrNull()?.size ?: 0
         val g = config.cfar_guard; val tr = config.cfar_training; val thr = config.cfar_threshold
-        for (r in (g+tr) until (nRange-g-tr)) {
-            for (d in (g+tr) until (nDoppler-g-tr)) {
-                val cell = rdMag[r][d]
-                var sum = 0f; var cnt = 0
+        for (r in (g+tr) until (nr-g-tr)) {
+            for (d in (g+tr) until (nd-g-tr)) {
+                val cell = rdMag[r][d]; var sum = 0f; var cnt = 0
                 for (dr in -(tr+g)..(tr+g)) for (dd in -(tr+g)..(tr+g)) {
                     if (abs(dr) > g || abs(dd) > g) { sum += rdMag[r+dr][d+dd]; cnt++ }
                 }
                 val noise = if (cnt > 0) sum / cnt else 0f
-                if (cell - noise >= thr) results.add(RawDetection(r, d, cell-noise, rangeResM, dopplerResMs))
+                if (cell - noise >= thr) res.add(RawDetection(r, d, cell-noise, rangeResM, dopplerResMs))
             }
         }
-        return results
+        return res
     }
 
     private fun classifyAndTrack(detections: List<RawDetection>): List<DetectedObject> {
@@ -475,47 +501,35 @@ class TinyRadUsbManager(private val context: Context) {
             val dist = det.distanceM; val speed = abs(det.speedMps); val snr = det.snrDb
             if (dist > config.maxRangeM || speed > config.maxSpeedMps || snr < config.minSnrDb) continue
             val cls = when {
-                dist > 10f && speed > 15f          -> ObjectClass.AERIAL_VEHICLE
-                speed > 5f  && snr > 20f           -> ObjectClass.GROUND_VEHICLE
-                speed < 1f  && snr > 25f           -> ObjectClass.GROUND_VEHICLE
-                speed in 0.3f..4f && dist < 20f    -> ObjectClass.HUMAN
-                speed in 0.1f..8f && snr < 20f     -> ObjectClass.ANIMAL
-                else                               -> ObjectClass.UNKNOWN
+                dist > 10f && speed > 15f       -> ObjectClass.AERIAL_VEHICLE
+                speed > 5f  && snr > 20f        -> ObjectClass.GROUND_VEHICLE
+                speed < 1f  && snr > 25f        -> ObjectClass.GROUND_VEHICLE
+                speed in 0.3f..4f && dist < 20f -> ObjectClass.HUMAN
+                speed in 0.1f..8f && snr < 20f  -> ObjectClass.ANIMAL
+                else                            -> ObjectClass.UNKNOWN
             }
             val confidence = when (cls) {
                 ObjectClass.HUMAN          -> (1f - dist/20f).coerceIn(0.4f, 0.95f)
                 ObjectClass.GROUND_VEHICLE -> (snr/40f).coerceIn(0.5f, 0.99f)
                 else                       -> 0.6f
             }
-            val trackId = tracker.entries.minByOrNull { (_,p) -> abs(p.distanceM-dist)+abs(p.speedMps-det.speedMps) }
+            val trackId = tracker.entries
+                .minByOrNull { (_,p) -> abs(p.distanceM-dist)+abs(p.speedMps-det.speedMps) }
                 ?.takeIf { (_,p) -> abs(p.distanceM-dist) < 2f }?.key ?: nextTrackId++
             val obj = DetectedObject(trackId=trackId, objectClass=cls, distanceM=dist,
                 azimuthDeg=0f, elevationDeg=0f, speedMps=det.speedMps, direction=Direction.AHEAD,
                 snrDb=snr, confidence=confidence, timestampMs=now)
             tracker[trackId] = obj; results.add(obj)
         }
-        tracker.entries.filter { (_,v) -> now-v.timestampMs > 2000 }.map { it.key }.forEach { tracker.remove(it) }
+        tracker.entries.filter { (_,v) -> now-v.timestampMs > 2000 }.map { it.key }
+            .forEach { tracker.remove(it) }
         return results.sortedBy { it.distanceM }
     }
 
-    // ── Command output ────────────────────────────────────────────────────────
-
-    private fun sendRaw(cmd: Short, value: Int) {
-        val buf = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putShort(cmd); buf.putShort(value.toShort())
-        val bytes = buf.array()
-        val n = usbConnection?.bulkTransfer(bulkOut, bytes, bytes.size, 500) ?: -1
-        AppLog.debug("TX CMD=0x${cmd.toInt().and(0xFFFF).toString(16).uppercase()} val=$value → $n bytes sent")
-    }
-
-    fun sendConfig(cfg: TinyRadConfig) {
-        sendRaw(0x9030.toShort(), cfg.bandwidthMHz.toInt())
-        sendRaw(0x9030.toShort(), cfg.framesPerSec)
-    }
+    fun sendConfig(cfg: TinyRadConfig) { config = cfg }
 }
 
-private fun Int.toHex(digits: Int)   = and(0xFFFF).toString(16).padStart(digits,'0').uppercase()
-private fun Short.toHex(digits: Int) = toInt().and(0xFFFF).toString(16).padStart(digits,'0').uppercase()
+private fun Int.toHex(digits: Int) = and(0xFFFF).toString(16).padStart(digits,'0').uppercase()
 private fun Int.nextPow2(): Int {
     var v = this; if (v <= 1) return 1; v--
     v=v or(v shr 1); v=v or(v shr 2); v=v or(v shr 4); v=v or(v shr 8); v=v or(v shr 16); return v+1
