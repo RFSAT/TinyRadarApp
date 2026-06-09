@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="ic_launcher_background">#FFFFFFFF</color>
     <color name="radar_blue">#FF0A84FF</color>
     <color name="radar_dark">#FF0D1B2A</color>
     <color name="radar_mid">#FF1A2B3C</color>

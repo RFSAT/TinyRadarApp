@@ -3,30 +3,31 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Radar sweep arcs -->
+    <!-- Outer ring -->
     <path
-        android:pathData="M54,54 m-32,0 a32,32 0 1,1 64,0 a32,32 0 1,1 -64,0"
+        android:pathData="M54,22 A32,32 0 1,1 53.999,22 Z"
         android:strokeColor="#FF0A84FF"
-        android:strokeWidth="2"
-        android:fillColor="@android:color/transparent"/>
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000"/>
+    <!-- Mid ring -->
     <path
-        android:pathData="M54,54 m-20,0 a20,20 0 1,1 40,0 a20,20 0 1,1 -40,0"
+        android:pathData="M54,34 A20,20 0 1,1 53.999,34 Z"
         android:strokeColor="#FF0A84FF"
-        android:strokeWidth="2"
-        android:fillColor="@android:color/transparent"/>
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000"/>
+    <!-- Inner ring -->
     <path
-        android:pathData="M54,54 m-10,0 a10,10 0 1,1 20,0 a10,10 0 1,1 -20,0"
+        android:pathData="M54,44 A10,10 0 1,1 53.999,44 Z"
         android:strokeColor="#FF0A84FF"
-        android:strokeWidth="2"
-        android:fillColor="@android:color/transparent"/>
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000"/>
     <!-- Sweep line -->
-    <line
-        android:x1="54" android:y1="54"
-        android:x2="86" android:y2="54"
+    <path
+        android:pathData="M54,54 L86,54"
         android:strokeColor="#FF00E5FF"
-        android:strokeWidth="2"/>
+        android:strokeWidth="2.5"/>
     <!-- Centre dot -->
-    <circle
-        android:cx="54" android:cy="54" android:r="3"
+    <path
+        android:pathData="M54,51 A3,3 0 1,1 53.999,51 Z"
         android:fillColor="#FF00E5FF"/>
 </vector>

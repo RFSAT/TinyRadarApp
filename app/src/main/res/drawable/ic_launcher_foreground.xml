@@ -3,20 +3,32 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Outer ring -->
     <path
-        android:pathData="M54,54 m-30,0 a30,30 0 1,1 60,0 a30,30 0 1,1 -60,0"
+        android:pathData="M54,22 A32,32 0 1,1 53.999,22 Z"
         android:strokeColor="#FF0A84FF"
-        android:strokeWidth="2.5"
-        android:fillColor="@android:color/transparent"/>
+        android:strokeWidth="2"
+        android:fillColor="#00000000"/>
+    <!-- Mid ring -->
     <path
-        android:pathData="M54,54 m-18,0 a18,18 0 1,1 36,0 a18,18 0 1,1 -36,0"
+        android:pathData="M54,34 A20,20 0 1,1 53.999,34 Z"
         android:strokeColor="#FF0A84FF"
-        android:strokeWidth="2.5"
-        android:fillColor="@android:color/transparent"/>
+        android:strokeWidth="2"
+        android:fillColor="#00000000"/>
+    <!-- Inner ring -->
     <path
-        android:pathData="M54,54 L84,54"
+        android:pathData="M54,44 A10,10 0 1,1 53.999,44 Z"
+        android:strokeColor="#FF0A84FF"
+        android:strokeWidth="2"
+        android:fillColor="#00000000"/>
+    <!-- Sweep line (horizontal right) -->
+    <path
+        android:pathData="M54,54 L86,54"
         android:strokeColor="#FF00E5FF"
-        android:strokeWidth="2.5"/>
-    <circle android:cx="54" android:cy="54" android:r="3"
+        android:strokeWidth="2"
+        android:fillColor="#00000000"/>
+    <!-- Centre dot (small circle via path) -->
+    <path
+        android:pathData="M54,51 A3,3 0 1,1 53.999,51 Z"
         android:fillColor="#FF00E5FF"/>
 </vector>
