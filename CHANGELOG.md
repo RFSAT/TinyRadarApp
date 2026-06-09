@@ -134,3 +134,42 @@ connection. Four separate issues were fixed:
   host bus with VID/PID, manufacturer, and interface count. Tapping any entry
   connects to it directly (including BF707 Bulk Device or any custom firmware
   PID that doesn't match the filter).
+
+---
+
+## [1.5] — 2026-06-09
+
+### Bug fixes — hardware-specific USB corrections from board identification
+
+Board identified as EV-TINYRAD24G (UG-1709), ADSP-BF706 Blackfin DSP,
+firmware R 1.3.0 / 2019, serial E1153609.  "BF707 Bulk Device" in the
+Android permission dialog is **correct and expected** per the official
+Analog Devices user guide (UG-1709, page 6, Figure 7).
+
+- **Wrong USB device class** (`TinyRadUsbManager`): the app was searching for
+  a CDC-ACM interface (class 0x02 / 0x0A).  The ADSP-BF706 is a
+  **vendor-specific bulk device** (class 0xFF) with no CDC layer at all.
+  The fixed code searches for any interface with both a bulk-IN and bulk-OUT
+  endpoint, preferring class 0xFF.  All interfaces and endpoints are now
+  logged to the in-app Log screen on every connect attempt for diagnostics.
+
+- **Broken interface search** (`TinyRadUsbManager`): the inner `break` in the
+  fallback loop only broke the inner `for`, not the outer one, so the code
+  could claim the wrong interface.  Replaced with a labelled `break@outer`.
+
+- **Wrong command framing** (`TinyRadUsbManager`): the board does not use
+  ASCII text commands.  The BF706 firmware uses 4-byte binary command frames
+  `[CmdCode:uint16 LE][Value:uint16 LE]`.  Commands rewritten accordingly:
+  CMD_INIT (0x0001), CMD_TRIGGER (0x0002), CMD_GETSYSINF (0x0004).
+
+- **Wrong USB device filter PIDs** (`usb_device_filter.xml`): the filter now
+  includes all known ADSP-BF70x Bulk Device PIDs for VID 0x0456 as decimal
+  integers: 46607 (0xB60F, primary), 46705 (0xB671), 46636 (0xB62C),
+  46627 (0xB623).
+
+### Note on exact PID
+The exact PID for your firmware revision is in `Demo_Driver.zip` on the USB
+memory stick shipped with the board.  Open the `.inf` file and find the line:
+`%DeviceName%=Install, USB\VID_0456&PID_xxxx`
+Convert the 4-digit hex PID to decimal and add it to `usb_device_filter.xml`
+if none of the existing entries match.

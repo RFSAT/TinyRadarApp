@@ -1,13 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    USB device filter for TinyRAD FMCW radar board.
-    IMPORTANT: vendor-id and product-id must be DECIMAL integers.
-    Android's UsbManager compares these as integers, not hex strings.
+    USB device filter for TinyRAD / ADSP-BF706 "BF707 Bulk Device"
+    (EV-TINYRAD24G, UG-1709)
 
-    Analog Devices TinyRAD: VID=0x0456 (1110), PID=0xB671 (46705)
-    STM32 CDC-ACM fallback:  VID=0x0483 (1155), PID=0x5740 (22336)
+    Android parses vendor-id and product-id as DECIMAL integers.
+
+    Analog Devices VID = 0x0456 = 1110 decimal
+
+    Known BF70x Bulk Device PIDs (decimal):
+      0xB60F = 46607  — ADSP-BF70x Bulk Device (standard ADI firmware)
+      0xB671 = 46705  — alternative PID seen on some firmware variants
+      0xB62C = 46636  — DemoRad legacy PID
+      0xB623 = 46627  — DemoRad/TinyRad alternate
+
+    NOTE: the exact PID is printed in the Demo_Driver.zip .inf file on the
+    USB memory stick supplied with the board.  Look for the line:
+        %DeviceName%=Install, USB\VID_0456&PID_xxxx
+    and convert the hex PID to decimal here.
+
+    STM32 CDC-ACM fallback: VID 0x0483 (1155), PID 0x5740 (22336)
 -->
 <resources>
-    <usb-device vendor-id="1110"  product-id="46705" />
-    <usb-device vendor-id="1155"  product-id="22336" />
+    <!-- ADSP-BF70x Bulk Device — primary TinyRAD PID -->
+    <usb-device vendor-id="1110" product-id="46607" />
+    <!-- ADSP-BF70x Bulk Device — alternate PID -->
+    <usb-device vendor-id="1110" product-id="46705" />
+    <!-- DemoRad / TinyRad legacy PIDs -->
+    <usb-device vendor-id="1110" product-id="46636" />
+    <usb-device vendor-id="1110" product-id="46627" />
+    <!-- STM32 CDC-ACM fallback -->
+    <usb-device vendor-id="1155" product-id="22336" />
 </resources>
