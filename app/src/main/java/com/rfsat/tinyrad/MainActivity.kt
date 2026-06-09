@@ -158,9 +158,18 @@ fun TinyRadApp(viewModel: TinyRadViewModel) {
                     onNavigateToRadar = {
                         navController.navigate(Screen.Radar.route) { launchSingleTop = true }
                     },
+                    onNavigateToConnect = {
+                        navController.navigate(Screen.Connect.route)
+                    },
                     onNavigateToAbout = {
                         navController.navigate(Screen.About.route)
                     }
+                )
+            }
+            composable(Screen.Connect.route) {
+                ConnectScreen(
+                    viewModel = viewModel,
+                    onBack    = { navController.popBackStack() }
                 )
             }
             composable(Screen.Radar.route) {

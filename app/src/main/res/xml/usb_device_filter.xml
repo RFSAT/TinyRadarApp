@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- TinyRAD USB device filter
-     Analog Devices TinyRAD: VID 0x0456 (Analog Devices), PID 0xB671
-     Also accept generic CDC-ACM serial (VID 0x0483 STM32, class 0x02) as fallback -->
+<!--
+    USB device filter for TinyRAD FMCW radar board.
+    IMPORTANT: vendor-id and product-id must be DECIMAL integers.
+    Android's UsbManager compares these as integers, not hex strings.
+
+    Analog Devices TinyRAD: VID=0x0456 (1110), PID=0xB671 (46705)
+    STM32 CDC-ACM fallback:  VID=0x0483 (1155), PID=0x5740 (22336)
+-->
 <resources>
-    <!-- Analog Devices TinyRAD exact match -->
-    <usb-device vendor-id="0x0456" product-id="0xB671" />
-    <!-- STM32 CDC-ACM fallback (some TinyRAD firmware variants) -->
-    <usb-device vendor-id="0x0483" product-id="0x5740" />
-    <!-- Generic CDC class — manual connect still available for other VID/PIDs -->
+    <usb-device vendor-id="1110"  product-id="46705" />
+    <usb-device vendor-id="1155"  product-id="22336" />
 </resources>

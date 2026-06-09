@@ -19,7 +19,19 @@ import com.rfsat.tinyrad.data.usb.TinyRadUsbManager
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
-private const val ACTION_USB_PERMISSION = "com.rfsat.tinyrad.USB_PERMISSION"
+// ─── Permission action — MUST match the action used in PendingIntent ──────────
+//
+// Bug fix (v1.4): the action string is baked into both the PendingIntent and the
+// IntentFilter at registration time.  They must be identical.  Previously the
+// PendingIntent was constructed with Intent(ACTION_USB_PERMISSION) but the
+// filter was constructed with IntentFilter(ACTION_USB_PERMISSION) — that part
+// was correct, but the PendingIntent was created with requestCode=0 every time,
+// meaning on Android 12+ the OS may reuse an older PendingIntent whose action
+// no longer matches the live receiver.  Using FLAG_UPDATE_CURRENT fixes that.
+//
+// Additionally the device was extracted from the permission-result intent, but
+// on some ROMs it arrives null there — fall back to the remembered pending device.
+const val ACTION_USB_PERMISSION = "com.rfsat.tinyrad.USB_PERMISSION"
 
 class TinyRadViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -27,46 +39,62 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
     private val recRepo  = RecordingRepository(application)
     private val prefRepo = PreferencesRepository(application)
 
-    // ── UI state ──────────────────────────────────────────────────────────────
-
     private val _uiState = MutableStateFlow(TinyRadUiState())
     val uiState: StateFlow<TinyRadUiState> = _uiState.asStateFlow()
 
-    // Frame rate tracking
-    private var lastFrameMs = 0L
     private var frameSamples = ArrayDeque<Long>(20)
+
+    // Remember the device we requested permission for so we can connect
+    // even if EXTRA_DEVICE comes back null (some ROM quirk).
+    private var pendingDevice: UsbDevice? = null
 
     // ── USB permission receiver ───────────────────────────────────────────────
 
     private val usbPermissionReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
+        override fun onReceive(ctx: Context, intent: Intent) {
             if (intent.action != ACTION_USB_PERMISSION) return
-            val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
-                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-            else
-                @Suppress("DEPRECATION") intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+
+            // Extract device — prefer intent extra, fall back to remembered device
+            val device: UsbDevice? = (
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                    intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+                else
+                    @Suppress("DEPRECATION") intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+            ) ?: pendingDevice
+
             val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
+
+            AppLog.info("Permission result: granted=$granted device=${device?.deviceName}")
+
             if (granted && device != null) {
+                pendingDevice = null
                 usbManager.connect(device)
                 observeFrames()
             } else {
-                _uiState.update { it.copy(
-                    connectionState = UsbConnectionState.ERROR,
-                    errorMessage    = "USB permission denied"
-                ) }
+                pendingDevice = null
+                _uiState.update {
+                    it.copy(
+                        connectionState = UsbConnectionState.ERROR,
+                        errorMessage    = "USB permission denied by user"
+                    )
+                }
             }
         }
     }
 
     init {
-        // Register USB permission receiver
+        // Register the permission receiver.
+        // Use RECEIVER_NOT_EXPORTED on API 33+ — the broadcast is sent only by
+        // the OS USB stack so it never crosses package boundaries.
         val filter = IntentFilter(ACTION_USB_PERMISSION)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
-            application.registerReceiver(usbPermissionReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            application.registerReceiver(
+                usbPermissionReceiver, filter,
+                Context.RECEIVER_NOT_EXPORTED
+            )
         else
             application.registerReceiver(usbPermissionReceiver, filter)
 
-        // Mirror USB connection state
         viewModelScope.launch {
             usbManager.connectionState.collect { cs ->
                 _uiState.update { it.copy(connectionState = cs) }
@@ -77,8 +105,6 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
                 _uiState.update { it.copy(deviceName = name) }
             }
         }
-
-        // Load persisted config
         viewModelScope.launch {
             prefRepo.configFlow.first().also { cfg ->
                 _uiState.update { it.copy(config = cfg) }
@@ -89,23 +115,72 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
     // ── USB connection ────────────────────────────────────────────────────────
 
     fun findAndConnect() {
-        val app    = getApplication<Application>()
+        val app     = getApplication<Application>()
         val devices = usbManager.findTinyRadDevices()
+
         if (devices.isEmpty()) {
-            _uiState.update { it.copy(
-                errorMessage = "No TinyRAD device found. Check USB-OTG cable."
-            ) }
+            AppLog.warn("No USB devices found")
+            _uiState.update {
+                it.copy(
+                    connectionState = UsbConnectionState.ERROR,
+                    errorMessage    = "No USB device found — check OTG cable and try again"
+                )
+            }
             return
         }
+
         val device = devices.first()
+        AppLog.info(
+            "Found device: ${device.productName ?: device.deviceName} " +
+            "VID=${device.vendorId.toString(16).uppercase()} " +
+            "PID=${device.productId.toString(16).uppercase()}"
+        )
+
+        if (usbManager.hasPermission(device)) {
+            AppLog.info("Permission already held — connecting directly")
+            usbManager.connect(device)
+            observeFrames()
+        } else {
+            AppLog.info("Requesting USB permission for ${device.deviceName}")
+            pendingDevice = device
+            _uiState.update { it.copy(connectionState = UsbConnectionState.REQUESTING_PERMISSION) }
+
+            // FLAG_UPDATE_CURRENT ensures the PendingIntent extras are refreshed
+            // if an old intent with the same action already existed in the system.
+            val pi = PendingIntent.getBroadcast(
+                app,
+                device.deviceId,          // unique requestCode per device
+                Intent(ACTION_USB_PERMISSION).apply {
+                    `package` = app.packageName   // scope to this app only
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            usbManager.requestPermission(device, pi)
+        }
+    }
+
+    /**
+     * Connect to a specific [device] chosen from the manual device picker.
+     * Requests permission if not already held.
+     */
+    fun connectDevice(device: UsbDevice) {
+        val app = getApplication<Application>()
+        AppLog.info(
+            "Manual connect: ${device.productName ?: device.deviceName} " +
+            "VID=${device.vendorId.toString(16).uppercase()} " +
+            "PID=${device.productId.toString(16).uppercase()}"
+        )
         if (usbManager.hasPermission(device)) {
             usbManager.connect(device)
             observeFrames()
         } else {
+            pendingDevice = device
+            _uiState.update { it.copy(connectionState = UsbConnectionState.REQUESTING_PERMISSION) }
             val pi = PendingIntent.getBroadcast(
-                app, 0,
-                Intent(ACTION_USB_PERMISSION),
-                PendingIntent.FLAG_IMMUTABLE
+                app,
+                device.deviceId,
+                Intent(ACTION_USB_PERMISSION).apply { `package` = app.packageName },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             usbManager.requestPermission(device, pi)
         }
@@ -132,26 +207,27 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
     private fun observeFrames() {
         viewModelScope.launch {
             usbManager.frameFlow.filterNotNull().collect { frame ->
-                // Frame rate
                 val now = System.currentTimeMillis()
                 frameSamples.addLast(now)
                 while (frameSamples.size > 20) frameSamples.removeFirst()
-                val fps = if (frameSamples.size >= 2) {
-                    1000f * (frameSamples.size - 1) / (frameSamples.last() - frameSamples.first()).toFloat()
-                } else 0f
+                val fps = if (frameSamples.size >= 2)
+                    1000f * (frameSamples.size - 1) /
+                        (frameSamples.last() - frameSamples.first()).toFloat()
+                else 0f
 
-                // Record if active
                 if (_uiState.value.isRecording) {
                     recRepo.writeFrame(frame)
                     _uiState.update { it.copy(recordingRows = recRepo.currentRows()) }
                 }
 
-                _uiState.update { it.copy(
-                    currentFrame    = frame,
-                    trackedObjects  = frame.detectedObjects,
-                    frameRate       = fps,
-                    totalFrames     = frame.frameIndex
-                ) }
+                _uiState.update {
+                    it.copy(
+                        currentFrame   = frame,
+                        trackedObjects = frame.detectedObjects,
+                        frameRate      = fps,
+                        totalFrames    = frame.frameIndex
+                    )
+                }
             }
         }
     }
@@ -188,7 +264,9 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
 
     override fun onCleared() {
         super.onCleared()
-        try { getApplication<Application>().unregisterReceiver(usbPermissionReceiver) } catch (_: Exception) {}
+        try {
+            getApplication<Application>().unregisterReceiver(usbPermissionReceiver)
+        } catch (_: Exception) {}
         usbManager.cleanup()
     }
 }

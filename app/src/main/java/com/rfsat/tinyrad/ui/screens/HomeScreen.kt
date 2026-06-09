@@ -23,8 +23,9 @@ import com.rfsat.tinyrad.viewmodel.TinyRadViewModel
 @Composable
 fun HomeScreen(
     viewModel: TinyRadViewModel,
-    onNavigateToRadar: () -> Unit,
-    onNavigateToAbout: () -> Unit
+    onNavigateToRadar:   () -> Unit,
+    onNavigateToConnect: () -> Unit,
+    onNavigateToAbout:   () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -112,6 +113,16 @@ fun HomeScreen(
                     Icon(Icons.Default.Usb, null)
                     Spacer(Modifier.width(8.dp))
                     Text("Connect TinyRAD", fontWeight = FontWeight.SemiBold)
+                }
+                // Fallback: show full USB device list (covers BF707 / custom firmware PIDs)
+                OutlinedButton(
+                    onClick  = onNavigateToConnect,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape    = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(Icons.Default.List, null, tint = RadarOnSurface.copy(alpha = 0.7f))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Browse all USB devices", color = RadarOnSurface.copy(alpha = 0.7f))
                 }
             }
             UsbConnectionState.CONNECTED -> {

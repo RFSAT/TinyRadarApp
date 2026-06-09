@@ -88,3 +88,49 @@ Format: `[version] — YYYY-MM-DD`
 - **Navigation fix** (`MainActivity.kt`): removed use of `inclusive` inside `popUpTo {}` lambda — this property is private in the current Navigation Compose API; `popUpTo(0)` without the block achieves the same clear-back-stack effect
 - **Type inference fix** (`SettingsScreen.kt`): added explicit `TinyRadConfig` type parameter to `mutableStateOf` so the compiler can resolve `cfg.copy(…)` calls without ambiguity
 - **Import fix** (`MainActivity.kt`): added explicit `import androidx.compose.foundation.layout.RowScope` so `RowScope` receiver on private extension composables resolves correctly
+
+---
+
+## [1.4] — 2026-06-09
+
+### Bug fixes — USB permission flow
+
+**Root cause**: app was stuck in "Requesting USB permission..." because the
+`BroadcastReceiver` received the result but Android couldn't complete the
+connection. Four separate issues were fixed:
+
+- **`PendingIntent` stale action** (`TinyRadViewModel`): used `requestCode=0`
+  for every device, meaning Android reused an older `PendingIntent` if one with
+  the same action already existed. Fixed by using `device.deviceId` as the
+  unique `requestCode` and adding `FLAG_UPDATE_CURRENT` so the intent extras
+  are always refreshed.
+
+- **`PendingIntent` not scoped to app** (`TinyRadViewModel`): added
+  `intent.package = app.packageName` so the OS delivers the permission result
+  only to this app and not broadcast-wide (required on Android 14+).
+
+- **`pendingDevice` fallback** (`TinyRadViewModel`): on some ROMs
+  `EXTRA_DEVICE` in the permission-result intent is null. The device that was
+  passed to `requestPermission()` is now remembered in `pendingDevice` and used
+  as the fallback in the receiver.
+
+- **Bogus `<uses-permission>` in manifest**: `android.hardware.usb.action
+  .USB_DEVICE_ATTACHED` is not a permission — it is an intent action. This tag
+  was silently ignored but removed for correctness.
+
+- **Missing `<category DEFAULT>`** in manifest USB intent-filter: the
+  `USB_DEVICE_ATTACHED` intent-filter needs `category DEFAULT` for Android to
+  route the intent to the activity correctly on some OEM ROMs.
+
+- **Hex values in `usb_device_filter.xml`**: Android parses `vendor-id` and
+  `product-id` as decimal integers. The filter had `0x0456` etc. which parsed
+  as zero, so no device ever matched. Fixed to decimal: 1110 / 46705 / 1155 /
+  22336.
+
+### New features
+
+- **Manual USB device picker** (`ConnectScreen`): "Browse all USB devices"
+  button on the Home screen opens a list of every device currently on the USB
+  host bus with VID/PID, manufacturer, and interface count. Tapping any entry
+  connects to it directly (including BF707 Bulk Device or any custom firmware
+  PID that doesn't match the filter).
