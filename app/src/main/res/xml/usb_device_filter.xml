@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- TinyRAD USB device filter
+     Analog Devices TinyRAD: VID 0x0456 (Analog Devices), PID 0xB671
+     Also accept generic CDC-ACM serial (VID 0x0483 STM32, class 0x02) as fallback -->
+<resources>
+    <!-- Analog Devices TinyRAD exact match -->
+    <usb-device vendor-id="0x0456" product-id="0xB671" />
+    <!-- STM32 CDC-ACM fallback (some TinyRAD firmware variants) -->
+    <usb-device vendor-id="0x0483" product-id="0x5740" />
+    <!-- Generic CDC class — manual connect still available for other VID/PIDs -->
+</resources>

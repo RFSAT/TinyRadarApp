@@ -1,0 +1,32 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Radar sweep arcs -->
+    <path
+        android:pathData="M54,54 m-32,0 a32,32 0 1,1 64,0 a32,32 0 1,1 -64,0"
+        android:strokeColor="#FF0A84FF"
+        android:strokeWidth="2"
+        android:fillColor="@android:color/transparent"/>
+    <path
+        android:pathData="M54,54 m-20,0 a20,20 0 1,1 40,0 a20,20 0 1,1 -40,0"
+        android:strokeColor="#FF0A84FF"
+        android:strokeWidth="2"
+        android:fillColor="@android:color/transparent"/>
+    <path
+        android:pathData="M54,54 m-10,0 a10,10 0 1,1 20,0 a10,10 0 1,1 -20,0"
+        android:strokeColor="#FF0A84FF"
+        android:strokeWidth="2"
+        android:fillColor="@android:color/transparent"/>
+    <!-- Sweep line -->
+    <line
+        android:x1="54" android:y1="54"
+        android:x2="86" android:y2="54"
+        android:strokeColor="#FF00E5FF"
+        android:strokeWidth="2"/>
+    <!-- Centre dot -->
+    <circle
+        android:cx="54" android:cy="54" android:r="3"
+        android:fillColor="#FF00E5FF"/>
+</vector>

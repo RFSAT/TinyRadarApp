@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="radar_blue">#FF0A84FF</color>
+    <color name="radar_dark">#FF0D1B2A</color>
+    <color name="radar_mid">#FF1A2B3C</color>
+    <color name="radar_surface">#FF1E3248</color>
+    <color name="radar_on_surface">#FFB0C4DE</color>
+    <color name="radar_accent">#FF00E5FF</color>
+    <color name="radar_warning">#FFFFA500</color>
+    <color name="radar_error">#FFCF6679</color>
+    <color name="radar_human">#FF43C59E</color>
+    <color name="radar_animal">#FFFFB347</color>
+    <color name="radar_ground_vehicle">#FF6FA8DC</color>
+    <color name="radar_aerial_vehicle">#FFCC99FF</color>
+</resources>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.TinyRadApp" parent="android:Theme.Material.NoTitleBar">
+        <item name="android:statusBarColor">@color/radar_dark</item>
+        <item name="android:navigationBarColor">@color/radar_dark</item>
+        <item name="android:windowBackground">@color/radar_dark</item>
+    </style>
+    <style name="Theme.TinyRadApp.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/radar_dark</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_icon</item>
+        <item name="postSplashScreenTheme">@style/Theme.TinyRadApp</item>
+    </style>
+</resources>

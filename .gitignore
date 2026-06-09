@@ -1,0 +1,33 @@
+# Android / Gradle
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# App build outputs (tracked via GitHub Actions artifacts)
+app/build/
+app/release/
+
+# Signing keys (NEVER commit these)
+*.jks
+*.keystore
+keystore.properties
+
+# Android Studio
+.idea/
+*.iml
+
+# ── Signing keystores — NEVER commit these ────────────────────────────────────
+*.jks
+*.keystore
+keystore_base64.txt
+
+# ── Local signing config ──────────────────────────────────────────────────────
+# If you use a local keystore.properties file, keep it out of git:
+keystore.properties
