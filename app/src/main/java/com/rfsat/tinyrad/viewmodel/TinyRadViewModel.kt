@@ -72,42 +72,6 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    // ── USB detach receiver — auto-disconnect when cable is removed ───────────
-    //
-    // ACTION_USB_DEVICE_DETACHED is a system broadcast so it uses RECEIVER_EXPORTED.
-    // It carries the UsbDevice that was removed; we check it matches our connected
-    // device before acting so other USB peripherals don't trigger a disconnect.
-
-    private val usbDetachReceiver = object : BroadcastReceiver() {
-        override fun onReceive(ctx: Context, intent: Intent) {
-            if (intent.action != UsbManager.ACTION_USB_DEVICE_DETACHED) return
-            val detached: UsbDevice? =
-                IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-            AppLog.info("USB detach event: ${detached?.deviceName ?: "unknown device"}")
-            // Only act if we were connected (state != DISCONNECTED / REQUESTING)
-            val cs = _uiState.value.connectionState
-            if (cs == UsbConnectionState.CONNECTED || cs == UsbConnectionState.CONNECTING) {
-                AppLog.warn("TinyRAD cable removed — disconnecting")
-                if (_uiState.value.isRecording) {
-                    viewModelScope.launch { recRepo.stopRecording() }
-                }
-                usbManager.disconnect()
-                // usbManager.disconnect() fires its own connectionState update,
-                // but also clear streaming flag and reset frame state here
-                _uiState.update {
-                    it.copy(
-                        isStreaming    = false,
-                        isRecording    = false,
-                        currentFrame   = null,
-                        trackedObjects = emptyList(),
-                        frameRate      = 0f,
-                        errorMessage   = "Cable disconnected"
-                    )
-                }
-            }
-        }
-    }
-
     init {
         // Permission receiver — private broadcast, must not be exported
         val permFilter = IntentFilter(ACTION_USB_PERMISSION)
@@ -116,15 +80,6 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
             usbPermissionReceiver,
             permFilter,
             ContextCompat.RECEIVER_NOT_EXPORTED
-        )
-
-        // Detach receiver — system broadcast, must be exported
-        val detachFilter = IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED)
-        ContextCompat.registerReceiver(
-            application,
-            usbDetachReceiver,
-            detachFilter,
-            ContextCompat.RECEIVER_EXPORTED
         )
 
         viewModelScope.launch {
@@ -297,7 +252,6 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
     override fun onCleared() {
         super.onCleared()
         try { getApplication<Application>().unregisterReceiver(usbPermissionReceiver) } catch (_: Exception) {}
-        try { getApplication<Application>().unregisterReceiver(usbDetachReceiver) }     catch (_: Exception) {}
         usbManager.cleanup()
     }
 }

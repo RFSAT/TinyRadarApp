@@ -400,3 +400,16 @@ it in an uninitialised state where every MeasTrig returned nothing (-1).
 - **DEBUG log brightness increased** (`LogRow`): DEBUG message alpha raised from
   0.45 to 0.78 so messages are clearly readable against the dark background
   while remaining visually distinct from INFO level.
+
+---
+
+## [2.4] — 2026-06-09
+
+### Bug fixes
+
+- **Reverted USB detach auto-disconnect** (`TinyRadViewModel`): the
+  `ACTION_USB_DEVICE_DETACHED` `BroadcastReceiver` introduced in v2.3 caused
+  the application to crash on connection.  The receiver declaration,
+  `init`-block registration, and `onCleared` unregistration have all been
+  removed.  The remaining features from v2.3 (log filter chips, About screen
+  update, DEBUG brightness) are unaffected.
