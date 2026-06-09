@@ -6,6 +6,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -120,7 +121,7 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape    = RoundedCornerShape(14.dp)
                 ) {
-                    Icon(Icons.Default.List, null, tint = RadarOnSurface.copy(alpha = 0.7f))
+                    Icon(Icons.AutoMirrored.Filled.List, null, tint = RadarOnSurface.copy(alpha = 0.7f))
                     Spacer(Modifier.width(8.dp))
                     Text("Browse all USB devices", color = RadarOnSurface.copy(alpha = 0.7f))
                 }

@@ -8,7 +8,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
-import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.rfsat.tinyrad.data.models.*
@@ -83,17 +83,17 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
     }
 
     init {
-        // Register the permission receiver.
-        // Use RECEIVER_NOT_EXPORTED on API 33+ — the broadcast is sent only by
-        // the OS USB stack so it never crosses package boundaries.
+        // Register the permission receiver with RECEIVER_NOT_EXPORTED on all
+        // API levels via ContextCompat — satisfies the Android U lint requirement
+        // without an API-level branch.  The broadcast is only ever sent by this
+        // app's own PendingIntent so it must never be exported.
         val filter = IntentFilter(ACTION_USB_PERMISSION)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
-            application.registerReceiver(
-                usbPermissionReceiver, filter,
-                Context.RECEIVER_NOT_EXPORTED
-            )
-        else
-            application.registerReceiver(usbPermissionReceiver, filter)
+        ContextCompat.registerReceiver(
+            application,
+            usbPermissionReceiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
 
         viewModelScope.launch {
             usbManager.connectionState.collect { cs ->

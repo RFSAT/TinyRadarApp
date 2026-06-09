@@ -199,3 +199,29 @@ matching against the wrong VID entirely.
   `TINYRAD_VID_PID` so `findTinyRadDevices()` returns the board immediately
   without falling back to "show all USB devices".
 - **README.md**: hardware identification table updated with confirmed values.
+
+---
+
+## [1.7] — 2026-06-09
+
+### Bug fixes — lint error and deprecation warnings
+
+- **Lint error** (`TinyRadViewModel`): `registerReceiver()` on API < 33 was
+  called without an exported-state flag, triggering the
+  `UnspecifiedRegisterReceiverFlag` lint error introduced in Android U.
+  Replaced the API-level `if/else` branch with a single
+  `ContextCompat.registerReceiver(..., RECEIVER_NOT_EXPORTED)` call which
+  passes the correct flag on all API levels.  Removed the now-unused
+  `android.os.Build` import.
+
+- **Deprecation warnings** (6 occurrences across 5 files):
+  `Icons.Default.ArrowBack` and `Icons.Default.List` are deprecated in favour
+  of their `AutoMirrored` equivalents, which automatically mirror the icon in
+  RTL layouts.  Replaced in:
+  - `ConnectScreen.kt` — `ArrowBack`
+  - `HomeScreen.kt` — `List`
+  - `LogAndAboutScreens.kt` — `ArrowBack` (×2)
+  - `RecordingsScreen.kt` — `ArrowBack`
+  - `SettingsScreen.kt` — `ArrowBack`
+  Added `import androidx.compose.material.icons.automirrored.filled.*` to all
+  affected files.
