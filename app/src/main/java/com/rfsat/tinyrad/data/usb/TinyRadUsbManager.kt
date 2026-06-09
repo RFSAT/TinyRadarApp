@@ -44,16 +44,21 @@ import kotlin.math.*
 private const val TAG = "TinyRadUSB"
 
 // All known Analog Devices TinyRAD / BF70x Bulk Device VID/PID pairs.
-// VID 0x0456 = Analog Devices, Inc.
-// PIDs confirmed from Demo_Driver INF files and community reports.
-// NOTE: if none match your board, use "Browse all USB devices" to connect
-// manually, then check the Log screen for the board's actual VID/PID.
+//
+// VID 0x064B = "Analog Devices, Inc. Development Tools"
+//              (second ADI VID used on eval/firmware boards, incl. EV-TINYRAD24G)
+// VID 0x0456 = "Analog Devices, Inc." (production silicon)
+//
+// Confirmed from EV-TINYRAD24G board A24BF_TR_TX2RX4_D01,
+// firmware R 3.0.3 (2020-06-02), serial E1153609:
+//   VID 0x064B  PID 0x7823
 private val TINYRAD_VID_PID = listOf(
-    0x0456 to 0xB60F,   // ADSP-BF70x Bulk Device — primary (most common)
-    0x0456 to 0xB671,   // EV-TINYRAD24G alternate firmware
-    0x0456 to 0xB62C,   // DemoRad / older TinyRad firmware
+    0x064B to 0x7823,   // EV-TINYRAD24G firmware R 3.0.3 — CONFIRMED
+    0x0456 to 0xB60F,   // ADSP-BF70x Bulk Device — older firmware
+    0x0456 to 0xB671,   // EV-TINYRAD24G alternate older firmware
+    0x0456 to 0xB62C,   // DemoRad legacy
     0x0456 to 0xB623,   // DemoRad alternate
-    0x0483 to 0x5740    // STM32 CDC-ACM (fallback / custom firmware)
+    0x0483 to 0x5740    // STM32 CDC-ACM custom firmware fallback
 )
 
 // Bulk transfer timeout — generous to handle slow DSP boot

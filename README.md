@@ -5,7 +5,7 @@
 Developed by **[RFSAT Limited](https://www.rfsat.com)** as part of the **ENACT** project, funded by the European Union under the Horizon Europe programme (Grant Agreement No. 101157101).
 
 [![Build APK](https://github.com/rfsat/TinyRadApp/actions/workflows/build.yml/badge.svg)](https://github.com/rfsat/TinyRadApp/actions/workflows/build.yml)
-![Version](https://img.shields.io/badge/version-1.5-brightgreen)
+![Version](https://img.shields.io/badge/version-1.6-brightgreen)
 ![Android](https://img.shields.io/badge/Android-API%2026%2B-3DDC84?logo=android)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1-7F52FF?logo=kotlin)
 ![License](https://img.shields.io/badge/License-MIT-blue)
@@ -60,10 +60,12 @@ Default USB identifiers matched by the app:
 
 | Vendor | VID | PID | Notes |
 |---|---|---|---|
-| Analog Devices | 0x0456 | 0xB671 | TinyRAD primary |
+| Analog Devices Dev Tools | 0x064B | 0x7823 | **EV-TINYRAD24G fw R 3.0.3 — confirmed** |
+| Analog Devices | 0x0456 | 0xB60F | Older ADSP-BF70x firmware |
+| Analog Devices | 0x0456 | 0xB671 | Alternate older firmware |
 | STMicroelectronics | 0x0483 | 0x5740 | STM32 CDC-ACM fallback |
 
-If your board uses different VID/PID values, connect via the **Connect** flow which lists all attached USB devices.
+The board appears on the USB bus as **"BF707 Bulk Device"** — this is expected and correct per UG-1709 (page 6, Figure 7). VID `0x064B` is ADI's second vendor ID used exclusively for development/evaluation board firmware.
 
 ---
 

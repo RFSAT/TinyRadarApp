@@ -173,3 +173,29 @@ memory stick shipped with the board.  Open the `.inf` file and find the line:
 `%DeviceName%=Install, USB\VID_0456&PID_xxxx`
 Convert the 4-digit hex PID to decimal and add it to `usb_device_filter.xml`
 if none of the existing entries match.
+
+---
+
+## [1.6] — 2026-06-09
+
+### Bug fixes — confirmed VID/PID from physical board
+
+Confirmed from EV-TINYRAD24G board markings:
+- PCB label: `A24BF_TR_TX2RX4_D01`
+- Firmware: `TinyRad-FW_R-3-0-3 : 3.0.3` (2020-06-02)
+- Serial: `E1153609`
+- Actual USB IDs: **VID `0x064B` / PID `0x7823`**
+
+`VID 0x064B` is "Analog Devices, Inc. Development Tools" — ADI's second
+vendor ID used specifically on evaluation and firmware boards, distinct from
+`0x0456` used in production silicon.  All previous versions of the app were
+matching against the wrong VID entirely.
+
+- **`usb_device_filter.xml`**: `VID 0x064B / PID 0x7823` (decimal 1611/30755)
+  added as the primary (first) entry.  Android only auto-launches the activity
+  and shows the permission dialog for devices that match this filter; with the
+  wrong VID in the filter the OS would never have auto-matched the board.
+- **`TinyRadUsbManager.kt`**: `0x064B to 0x7823` added as first entry in
+  `TINYRAD_VID_PID` so `findTinyRadDevices()` returns the board immediately
+  without falling back to "show all USB devices".
+- **README.md**: hardware identification table updated with confirmed values.

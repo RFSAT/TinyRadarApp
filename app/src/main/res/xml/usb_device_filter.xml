@@ -1,33 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    USB device filter for TinyRAD / ADSP-BF706 "BF707 Bulk Device"
-    (EV-TINYRAD24G, UG-1709)
+    USB device filter for EV-TINYRAD24G (UG-1709)
+    ADSP-BF706 Blackfin DSP — appears as "BF707 Bulk Device"
 
     Android parses vendor-id and product-id as DECIMAL integers.
 
-    Analog Devices VID = 0x0456 = 1110 decimal
+    VID 0x064B = 1611  — "Analog Devices, Inc. Development Tools"
+                          (second ADI VID used for eval/firmware boards)
+    VID 0x0456 = 1110  — "Analog Devices, Inc." (production silicon)
 
-    Known BF70x Bulk Device PIDs (decimal):
-      0xB60F = 46607  — ADSP-BF70x Bulk Device (standard ADI firmware)
-      0xB671 = 46705  — alternative PID seen on some firmware variants
-      0xB62C = 46636  — DemoRad legacy PID
-      0xB623 = 46627  — DemoRad/TinyRad alternate
+    Confirmed pair from EV-TINYRAD24G firmware R 3.0.3 (2020-06-02):
+      VID 0x064B (1611)  PID 0x7823 (30755)
 
-    NOTE: the exact PID is printed in the Demo_Driver.zip .inf file on the
-    USB memory stick supplied with the board.  Look for the line:
-        %DeviceName%=Install, USB\VID_0456&PID_xxxx
-    and convert the hex PID to decimal here.
-
-    STM32 CDC-ACM fallback: VID 0x0483 (1155), PID 0x5740 (22336)
+    Legacy/alternate pairs kept as fallback:
+      VID 0x0456 + various BF70x PIDs from older firmware revisions
 -->
 <resources>
-    <!-- ADSP-BF70x Bulk Device — primary TinyRAD PID -->
+    <!-- ── Confirmed: EV-TINYRAD24G firmware R 3.0.3 ── -->
+    <usb-device vendor-id="1611" product-id="30755" />
+
+    <!-- ── Fallback: older TinyRad / DemoRad firmware (VID 0x0456) ── -->
     <usb-device vendor-id="1110" product-id="46607" />
-    <!-- ADSP-BF70x Bulk Device — alternate PID -->
     <usb-device vendor-id="1110" product-id="46705" />
-    <!-- DemoRad / TinyRad legacy PIDs -->
     <usb-device vendor-id="1110" product-id="46636" />
     <usb-device vendor-id="1110" product-id="46627" />
-    <!-- STM32 CDC-ACM fallback -->
+
+    <!-- ── Fallback: STM32 CDC-ACM custom firmware ── -->
     <usb-device vendor-id="1155" product-id="22336" />
 </resources>
