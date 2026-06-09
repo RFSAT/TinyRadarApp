@@ -54,3 +54,17 @@ Format: `[version] — YYYY-MM-DD`
 - GitHub Actions workflow: lint, unit tests, release APK + AAB
 - All output artifacts named `TinyRadApp_v<major>.<minor>.apk`
 - GitHub Release created automatically on `v*` tags
+
+---
+
+## [1.1] — 2026-06-09
+
+### Bug fixes
+- **Theme fix**: replaced `android:Theme.Material.NoTitleBar` (unavailable at API 35) with `Theme.AppCompat.NoActionBar` — resolves `AAPT: error: resource android:style/Theme.Material.NoTitleBar not found` build failure
+
+---
+
+## [1.1] — 2026-06-09
+
+### Bug fixes
+- **Theme fix**: replaced `android:Theme.Material.NoTitleBar` (unavailable at API 35) with `Theme.AppCompat.NoActionBar` — resolves `AAPT: error: resource android:style/Theme.Material.NoTitleBar not found` build failure
