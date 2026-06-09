@@ -310,3 +310,36 @@ int16   IQ[508]            Rx0_I Rx0_Q Rx1_I Rx1_Q Rx2_I Rx2_Q Rx3_I Rx3_Q
 - 4 Rx channels, 127 complex samples per chirp per channel
 - Range resolution: c/(2×250 MHz) ≈ 0.6 m
 - All 4 Rx channels stored; Rx0 used for range-Doppler processing (MIMO DBF planned)
+
+---
+
+## [2.1] — 2026-06-09
+
+### Bug fixes — USB bulk transfer returning -1
+
+Root-cause analysis of `Expected 1024 bytes, got -1` from the pcap:
+
+- **Wrong endpoint selection**: The board uses **ep=0x01** (OUT) and **ep=0x81** (IN),
+  confirmed from the capture. The previous code searched for the first bulk-IN/OUT pair
+  by direction only; on some Android USB Host stacks the iteration order means ep=0x01
+  could be found as the OUT endpoint but something else picked as IN. Fixed to match
+  by explicit address first (`ep.address == 0x01` / `ep.address == 0x81`), with
+  direction-only fallback if the exact address isn't found.
+
+- **Timeout too short**: `BULK_TIMEOUT_MS = 200` was used for all reads. The board DSP
+  takes non-trivial time to process a chirp and DMA the result. Separated into
+  `CMD_TIMEOUT_MS = 1000`, `DATA_TIMEOUT_MS = 2000`, `ACK_TIMEOUT_MS = 1000`.
+
+- **Buffer size passed to bulkTransfer**: Was passing `expect` (1024) as the length
+  argument — this is correct API usage but combined with the short timeout caused
+  premature -1. The buffer is now sized to `ADC_FRAME_SIZE = 1024` and `buf.size`
+  is passed.
+
+- **Silent init failure**: Init ACK mismatches were logged but the streaming loop
+  continued. If init fails the board won't respond to triggers. Added hard abort
+  on init failure with `ERROR` state update.
+
+- **Zero-length frames in pcap**: The `ep=0x01 CMP 0 bytes` and `ep=0x81 SUB 0 bytes`
+  frames are Windows USB stack housekeeping — OUT completion and async read pre-post
+  respectively. Android's `bulkTransfer()` handles these transparently; no code
+  change needed for them.
