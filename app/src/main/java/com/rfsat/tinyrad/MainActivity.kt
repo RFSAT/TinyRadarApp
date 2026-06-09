@@ -8,6 +8,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -32,10 +33,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-
-        // Handle USB device attached at launch (from device filter intent)
         handleUsbIntent(intent)
-
         setContent {
             TinyRadAppTheme {
                 TinyRadApp(viewModel)
@@ -70,13 +68,13 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TinyRadApp(viewModel: TinyRadViewModel) {
-    val navController = rememberNavController()
-    val currentEntry  by navController.currentBackStackEntryAsState()
-    val currentRoute  = currentEntry?.destination?.route
+    val navController  = rememberNavController()
+    val currentEntry   by navController.currentBackStackEntryAsState()
+    val currentRoute   = currentEntry?.destination?.route
 
-    val uiState    by viewModel.uiState.collectAsState()
-    val isConnected = uiState.connectionState == UsbConnectionState.CONNECTED
-    val isStreaming = uiState.isStreaming
+    val uiState     by viewModel.uiState.collectAsState()
+    val isConnected  = uiState.connectionState == UsbConnectionState.CONNECTED
+    val isStreaming  = uiState.isStreaming
 
     val bottomRoutes = listOf(
         Screen.Home.route, Screen.Radar.route,
@@ -89,55 +87,78 @@ fun TinyRadApp(viewModel: TinyRadViewModel) {
             if (showBottom) {
                 NavigationBar(containerColor = RadarDarkMid) {
                     NavItem(
-                        selected    = currentRoute == Screen.Home.route,
-                        icon        = Icons.Default.Home,
-                        label       = "Home",
-                        onClick     = { navController.navigate(Screen.Home.route) { popUpTo(0); launchSingleTop = true } }
+                        selected = currentRoute == Screen.Home.route,
+                        icon     = Icons.Default.Home,
+                        label    = "Home",
+                        onClick  = {
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(0)
+                                launchSingleTop = true
+                            }
+                        }
                     )
                     NavItem(
-                        selected    = currentRoute == Screen.Radar.route,
-                        icon        = Icons.Default.RadarRounded,
-                        label       = "Radar",
-                        enabled     = isConnected && isStreaming,
-                        onClick     = { navController.navigate(Screen.Radar.route) { launchSingleTop = true } }
+                        selected = currentRoute == Screen.Radar.route,
+                        icon     = Icons.Default.TrackChanges,   // radar-style icon
+                        label    = "Radar",
+                        enabled  = isConnected && isStreaming,
+                        onClick  = {
+                            navController.navigate(Screen.Radar.route) {
+                                launchSingleTop = true
+                            }
+                        }
                     )
                     NavItem(
-                        selected    = currentRoute == Screen.Recordings.route,
-                        icon        = Icons.Default.TableChart,
-                        label       = "Files",
-                        onClick     = { navController.navigate(Screen.Recordings.route) { launchSingleTop = true } }
+                        selected = currentRoute == Screen.Recordings.route,
+                        icon     = Icons.Default.TableChart,
+                        label    = "Files",
+                        onClick  = {
+                            navController.navigate(Screen.Recordings.route) {
+                                launchSingleTop = true
+                            }
+                        }
                     )
                     val logEntries  by AppLog.entries.collectAsState()
-                    val errorCount  = remember(logEntries) { logEntries.count { it.level == LogLevel.ERROR } }
+                    val errorCount  = remember(logEntries) {
+                        logEntries.count { it.level == LogLevel.ERROR }
+                    }
                     NavItemBadged(
                         selected    = currentRoute == Screen.Log.route,
                         icon        = Icons.Default.Terminal,
                         label       = "Log",
                         badgeCount  = errorCount,
-                        onClick     = { navController.navigate(Screen.Log.route) { launchSingleTop = true } }
+                        onClick     = {
+                            navController.navigate(Screen.Log.route) {
+                                launchSingleTop = true
+                            }
+                        }
                     )
                     NavItem(
-                        selected    = currentRoute == Screen.Settings.route,
-                        icon        = Icons.Default.Settings,
-                        label       = "Settings",
-                        onClick     = { navController.navigate(Screen.Settings.route) { launchSingleTop = true } }
+                        selected = currentRoute == Screen.Settings.route,
+                        icon     = Icons.Default.Settings,
+                        label    = "Settings",
+                        onClick  = {
+                            navController.navigate(Screen.Settings.route) {
+                                launchSingleTop = true
+                            }
+                        }
                     )
                 }
             }
         }
     ) { pad ->
         NavHost(
-            navController  = navController,
+            navController    = navController,
             startDestination = Screen.Home.route,
-            modifier       = Modifier.padding(pad).fillMaxSize()
+            modifier         = Modifier.padding(pad).fillMaxSize()
         ) {
             composable(Screen.Home.route) {
                 HomeScreen(
-                    viewModel           = viewModel,
-                    onNavigateToRadar   = {
+                    viewModel         = viewModel,
+                    onNavigateToRadar = {
                         navController.navigate(Screen.Radar.route) { launchSingleTop = true }
                     },
-                    onNavigateToAbout   = {
+                    onNavigateToAbout = {
                         navController.navigate(Screen.About.route)
                     }
                 )
@@ -146,7 +167,9 @@ fun TinyRadApp(viewModel: TinyRadViewModel) {
                 RadarScreen(
                     viewModel    = viewModel,
                     onDisconnect = {
-                        navController.navigate(Screen.Home.route) { popUpTo(0); inclusive = true }
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(0)
+                        }
                     }
                 )
             }
@@ -172,7 +195,7 @@ fun TinyRadApp(viewModel: TinyRadViewModel) {
     }
 }
 
-// ── Nav bar item helpers ──────────────────────────────────────────────────────
+// ── Nav bar helpers ───────────────────────────────────────────────────────────
 
 @Composable
 private fun RowScope.NavItem(

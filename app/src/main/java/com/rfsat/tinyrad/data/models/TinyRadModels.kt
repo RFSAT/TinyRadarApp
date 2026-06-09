@@ -116,7 +116,7 @@ data class TinyRadUiState(
     val isStreaming:         Boolean             = false,
     val isRecording:         Boolean             = false,
     val currentFrame:        RadarFrame?         = null,
-    val trackedObjects:      List<DetectedObject>= emptyList(),
+    val trackedObjects:      List<DetectedObject> = emptyList(),
     val frameRate:           Float               = 0f,
     val totalFrames:         Long                = 0L,
     val recordingPath:       String?             = null,

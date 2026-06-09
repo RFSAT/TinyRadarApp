@@ -26,7 +26,7 @@ fun SettingsScreen(
     onBack:    () -> Unit
 ) {
     val state  by viewModel.uiState.collectAsState()
-    var cfg    by remember(state.config) { mutableStateOf(state.config) }
+    var cfg    by remember(state.config) { mutableStateOf<com.rfsat.tinyrad.data.models.TinyRadConfig>(state.config) }
 
     Scaffold(
         topBar = {

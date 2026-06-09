@@ -26,22 +26,16 @@ fun HomeScreen(
     onNavigateToRadar: () -> Unit,
     onNavigateToAbout: () -> Unit
 ) {
-    val state by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
     Column(
-        modifier           = Modifier.fillMaxSize().background(RadarDark).padding(24.dp),
+        modifier            = Modifier.fillMaxSize().background(RadarDark).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         Spacer(Modifier.height(16.dp))
 
-        // App title
-        Text(
-            "TinyRAD",
-            fontSize   = 36.sp,
-            fontWeight = FontWeight.Bold,
-            color      = RadarAccent
-        )
+        Text("TinyRAD", fontSize = 36.sp, fontWeight = FontWeight.Bold, color = RadarAccent)
         Text(
             "FMCW Radar Object Detection",
             fontSize = 14.sp,
@@ -50,10 +44,9 @@ fun HomeScreen(
 
         Spacer(Modifier.height(8.dp))
 
-        // Radar animation placeholder (concentric circles)
         RadarSweepIcon(
-            isConnected = state.connectionState == UsbConnectionState.CONNECTED,
-            isStreaming = state.isStreaming
+            isConnected = uiState.connectionState == UsbConnectionState.CONNECTED,
+            isStreaming  = uiState.isStreaming
         )
 
         // Connection status card
@@ -62,33 +55,38 @@ fun HomeScreen(
             shape    = RoundedCornerShape(16.dp),
             colors   = CardDefaults.cardColors(containerColor = RadarDarkMid)
         ) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    val dot = when (state.connectionState) {
-                        UsbConnectionState.CONNECTED           -> RadarAccent
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    verticalAlignment      = Alignment.CenterVertically,
+                    horizontalArrangement  = Arrangement.spacedBy(12.dp)
+                ) {
+                    val dotColour = when (uiState.connectionState) {
+                        UsbConnectionState.CONNECTED                                 -> RadarAccent
                         UsbConnectionState.CONNECTING,
-                        UsbConnectionState.REQUESTING_PERMISSION -> RadarWarning
-                        else                                   -> RadarError
+                        UsbConnectionState.REQUESTING_PERMISSION                     -> RadarWarning
+                        else                                                         -> RadarError
                     }
-                    Box(
-                        Modifier.size(10.dp).clip(CircleShape).background(dot)
-                    )
-                    Text(state.deviceName, color = RadarOnSurface, fontWeight = FontWeight.Medium)
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(dotColour))
+                    Text(uiState.deviceName, color = RadarOnSurface, fontWeight = FontWeight.Medium)
                 }
                 Text(
-                    when (state.connectionState) {
-                        UsbConnectionState.CONNECTED            -> "USB connected — ready"
-                        UsbConnectionState.CONNECTING           -> "Connecting…"
-                        UsbConnectionState.REQUESTING_PERMISSION-> "Requesting USB permission…"
-                        UsbConnectionState.DISCONNECTED         -> "Disconnected — attach TinyRAD via USB"
-                        UsbConnectionState.ERROR                -> "Error: ${state.errorMessage ?: "unknown"}"
+                    when (uiState.connectionState) {
+                        UsbConnectionState.CONNECTED             -> "USB connected — ready"
+                        UsbConnectionState.CONNECTING            -> "Connecting…"
+                        UsbConnectionState.REQUESTING_PERMISSION -> "Requesting USB permission…"
+                        UsbConnectionState.DISCONNECTED          -> "Disconnected — attach TinyRAD via USB"
+                        UsbConnectionState.ERROR                 ->
+                            "Error: ${uiState.errorMessage ?: "unknown"}"
                     },
                     fontSize = 13.sp,
                     color    = RadarOnSurface.copy(alpha = 0.6f)
                 )
-                if (state.isStreaming) {
+                if (uiState.isStreaming) {
                     Text(
-                        "Streaming  •  ${state.frameRate.let { "%.1f".format(it) }} fps  •  ${state.totalFrames} frames",
+                        "Streaming  •  ${"%.1f".format(uiState.frameRate)} fps  •  ${uiState.totalFrames} frames",
                         fontSize = 12.sp,
                         color    = RadarAccent
                     )
@@ -96,17 +94,17 @@ fun HomeScreen(
             }
         }
 
-        state.errorMessage?.let { err ->
-            if (state.connectionState == UsbConnectionState.ERROR) {
+        if (uiState.connectionState == UsbConnectionState.ERROR) {
+            uiState.errorMessage?.let { err ->
                 Text(err, color = RadarError, fontSize = 12.sp, textAlign = TextAlign.Center)
             }
         }
 
         // Action buttons
-        when (state.connectionState) {
+        when (uiState.connectionState) {
             UsbConnectionState.DISCONNECTED, UsbConnectionState.ERROR -> {
                 Button(
-                    onClick = { viewModel.findAndConnect() },
+                    onClick  = { viewModel.findAndConnect() },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape    = RoundedCornerShape(14.dp),
                     colors   = ButtonDefaults.buttonColors(containerColor = RadarBlue)
@@ -117,17 +115,16 @@ fun HomeScreen(
                 }
             }
             UsbConnectionState.CONNECTED -> {
-                if (!state.isStreaming) {
+                if (!uiState.isStreaming) {
                     Button(
-                        onClick  = {
-                            viewModel.startStreaming()
-                            onNavigateToRadar()
-                        },
+                        onClick  = { viewModel.startStreaming(); onNavigateToRadar() },
                         modifier = Modifier.fillMaxWidth().height(52.dp),
                         shape    = RoundedCornerShape(14.dp),
-                        colors   = ButtonDefaults.buttonColors(containerColor = RadarAccent.copy(alpha = 0.85f))
+                        colors   = ButtonDefaults.buttonColors(
+                            containerColor = RadarAccent.copy(alpha = 0.85f)
+                        )
                     ) {
-                        Icon(Icons.Default.RadarRounded, null, tint = RadarDark)
+                        Icon(Icons.Default.TrackChanges, null, tint = RadarDark)
                         Spacer(Modifier.width(8.dp))
                         Text("Start Radar", fontWeight = FontWeight.SemiBold, color = RadarDark)
                     }
@@ -136,7 +133,9 @@ fun HomeScreen(
                         onClick  = onNavigateToRadar,
                         modifier = Modifier.fillMaxWidth().height(52.dp),
                         shape    = RoundedCornerShape(14.dp),
-                        colors   = ButtonDefaults.buttonColors(containerColor = RadarAccent.copy(alpha = 0.85f))
+                        colors   = ButtonDefaults.buttonColors(
+                            containerColor = RadarAccent.copy(alpha = 0.85f)
+                        )
                     ) {
                         Icon(Icons.Default.OpenInFull, null, tint = RadarDark)
                         Spacer(Modifier.width(8.dp))
@@ -167,20 +166,8 @@ fun HomeScreen(
 @Composable
 fun RadarSweepIcon(isConnected: Boolean, isStreaming: Boolean) {
     val colour = if (isConnected) RadarAccent else RadarOnSurface.copy(alpha = 0.3f)
-    Box(
-        modifier            = Modifier.size(140.dp),
-        contentAlignment    = Alignment.Center
-    ) {
+    Box(modifier = Modifier.size(140.dp), contentAlignment = Alignment.Center) {
         for (r in listOf(65.dp, 45.dp, 25.dp)) {
-            Box(
-                Modifier.size(r * 2)
-                    .clip(CircleShape)
-                    .background(Color.Transparent)
-                    .then(
-                        Modifier.padding(1.dp)
-                    )
-            )
-            // Outline only — draw as bordered box
             Surface(
                 modifier = Modifier.size(r * 2),
                 shape    = CircleShape,
@@ -191,11 +178,8 @@ fun RadarSweepIcon(isConnected: Boolean, isStreaming: Boolean) {
                 )
             ) {}
         }
-        // Centre dot
-        Box(
-            Modifier.size(8.dp).clip(CircleShape).background(if (isStreaming) RadarAccent else colour)
-        )
-        // Sweep line hint
+        Box(Modifier.size(8.dp).clip(CircleShape)
+            .background(if (isStreaming) RadarAccent else colour))
         Box(
             Modifier.height(1.5.dp).width(65.dp)
                 .align(Alignment.CenterEnd)
