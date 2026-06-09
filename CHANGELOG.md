@@ -366,3 +366,113 @@ it in an uninitialised state where every MeasTrig returned nothing (-1).
 - **CfgFmcw #5 param[2] byte-swapped**: `0x003D0080` → `0x0080003D`.
   The previous decode read the hex display as big-endian; the actual uint32
   little-endian value is `0x0080003D`. From pcap frame 367 byte-exact decode.
+
+---
+
+## [2.3] — 2026-06-09
+
+### New features
+
+- **Log level filter chips** (`LogScreen`): a horizontal chip strip above the log
+  list lets you filter by ALL / ERRO / WARN / INFO / DEBU.  Each chip shows the
+  count for that level.  Selecting a chip that is already active clears the
+  filter back to ALL.  Auto-scroll to bottom follows the filtered view.
+
+- **USB cable-removal auto-disconnect** (`TinyRadViewModel`): a
+  `BroadcastReceiver` for `ACTION_USB_DEVICE_DETACHED` is now registered at
+  ViewModel init time.  When the cable is unplugged the receiver calls
+  `usbManager.disconnect()`, stops any in-progress recording, clears streaming
+  state, and sets the error message "Cable disconnected" so the Home screen
+  shows the error state immediately.  The receiver is registered with
+  `RECEIVER_EXPORTED` (required for system broadcasts) and unregistered in
+  `onCleared`.
+
+- **About screen updated**:
+  - ENACT project reference and EU grant language removed
+  - Hardware row updated to "Analog Devices EV-TINYRAD24G" with confirmed
+    VID/PID
+  - Interface row updated to "USB Host — vendor bulk (OTG)"
+  - Added two tappable link rows that open the system browser:
+    - RFSAT Limited → https://www.rfsat.com
+    - TinyRAD Evaluation Board → https://www.analog.com/en/resources/
+      evaluation-hardware-and-software/evaluation-boards-kits/eval-tinyrad.html
+
+- **DEBUG log brightness increased** (`LogRow`): DEBUG message alpha raised from
+  0.45 to 0.78 so messages are clearly readable against the dark background
+  while remaining visually distinct from INFO level.
+
+---
+
+## [2.4] — 2026-06-09
+
+### Bug fixes
+
+- **Reverted USB detach auto-disconnect** (`TinyRadViewModel`): the
+  `ACTION_USB_DEVICE_DETACHED` `BroadcastReceiver` introduced in v2.3 caused
+  the application to crash on connection.  The receiver declaration,
+  `init`-block registration, and `onCleared` unregistration have all been
+  removed.  The remaining features from v2.3 (log filter chips, About screen
+  update, DEBUG brightness) are unaffected.
+
+---
+
+## [3.0] — 2026-06-09
+
+### New features — complete protocol rewrite from Python source
+
+The TinyRadTool Python source (Connection.py, TinyRad.py) provided the 
+authoritative protocol specification. The entire USB manager was rewritten.
+
+#### Three fundamental bugs fixed
+
+**1. OUT frame format completely wrong (all previous versions)**
+
+Every command sent since v1.0 was malformed. The Python `CmdBuild` function
+produces this structure:
+
+```
+LenData   = len(DspCmd) + 1
+word0     = (Ack<<24) | (LenData<<16) | CmdCod
+TxData    = [word0, DspCmd[0], DspCmd[1], ...]
+byte_len  = LenData * 4
+
+2048-byte frame:
+  offset 0:  uint16 LE  byte_len (= LenData*4)
+  offset 2:  uint32 LE  word0   = (Ack<<24)|(LenData<<16)|CmdCod
+  offset 6:  uint32 LE  DspCmd[0]
+  offset 10: uint32 LE  DspCmd[1]
+  ...
+```
+
+Previous code had separate `cmd`, `nparams`, `reserved` fields — none of
+which exist in the real protocol.
+
+**2. All init DspCmd parameter values were wrong**
+
+All init frame parameters were re-decoded from the pcap using the correct
+frame structure. Example (RegWrite F331):
+- Old wrong:  `[0x00010000, 0, 0x00030000, ...]`
+- Correct:    `[7, 1, 0, 0x00020006, 0x20001499, ...]`
+  (7=SpiMask, 1=mode, 0=Chn_Rx, then actual ADF5904 register values)
+
+**3. Measurement trigger flow wrong**
+
+Previous code sent 80 separate `0x9032` commands each expecting a 1024-byte
+response per chirp, with arbitrary parameter values. From `Dsp_GetDat`:
+
+```python
+DspCmd = [1, 1, Len, 0]          # Len = N*NrChn int16s
+CmdSend(0x9032, DspCmd)
+UsbData = ConGetUsbData(Len*2)   # read Len*2 bytes
+CmdRecv()                        # then read ACK
+```
+
+The `Len` field (DspCmd[2]) tells the board how many int16 samples to return.
+Without it the board returns nothing. Correct values: `Len=512` (128 samples
+× 4 Rx), returning 1024 bytes per trigger — exactly matching the pcap.
+
+#### Physics parameters corrected (from TinyRad.py)
+- `Rf_fStrt = 24.000 GHz`, `Rf_fStop = 24.256 GHz`  → BW = 256 MHz
+- Range resolution = c / (2 × 256 MHz) ≈ 0.585 m
+- Chirp period = 40 ms (4 000 000 × 10 ns, from StrtMeas frame)
+- Samples per chirp N = 128 (from StrtMeas frame F367)

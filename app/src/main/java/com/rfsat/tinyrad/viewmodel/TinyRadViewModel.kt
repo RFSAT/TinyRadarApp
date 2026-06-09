@@ -44,9 +44,6 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
     val uiState: StateFlow<TinyRadUiState> = _uiState.asStateFlow()
 
     private var frameSamples = ArrayDeque<Long>(20)
-
-    // Remember the device we requested permission for so we can connect
-    // even if EXTRA_DEVICE comes back null (some ROM quirk).
     private var pendingDevice: UsbDevice? = null
 
     // ── USB permission receiver ───────────────────────────────────────────────
@@ -54,17 +51,11 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
     private val usbPermissionReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
             if (intent.action != ACTION_USB_PERMISSION) return
-
-            // Extract device — prefer intent extra, fall back to remembered device.
-            // IntentCompat handles the API 33 / pre-33 split internally.
             val device: UsbDevice? =
                 IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
                     ?: pendingDevice
-
             val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
-
             AppLog.info("Permission result: granted=$granted device=${device?.deviceName}")
-
             if (granted && device != null) {
                 pendingDevice = null
                 usbManager.connect(device)
@@ -82,15 +73,12 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
     }
 
     init {
-        // Register the permission receiver with RECEIVER_NOT_EXPORTED on all
-        // API levels via ContextCompat — satisfies the Android U lint requirement
-        // without an API-level branch.  The broadcast is only ever sent by this
-        // app's own PendingIntent so it must never be exported.
-        val filter = IntentFilter(ACTION_USB_PERMISSION)
+        // Permission receiver — private broadcast, must not be exported
+        val permFilter = IntentFilter(ACTION_USB_PERMISSION)
         ContextCompat.registerReceiver(
             application,
             usbPermissionReceiver,
-            filter,
+            permFilter,
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
 
@@ -263,9 +251,7 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
 
     override fun onCleared() {
         super.onCleared()
-        try {
-            getApplication<Application>().unregisterReceiver(usbPermissionReceiver)
-        } catch (_: Exception) {}
+        try { getApplication<Application>().unregisterReceiver(usbPermissionReceiver) } catch (_: Exception) {}
         usbManager.cleanup()
     }
 }
