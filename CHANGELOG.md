@@ -599,3 +599,31 @@ Drain buffer also increased to `COMBINED_BYTES` and repeat count raised to 6
 - "Analog Devices EV-TINYRAD24G" row: tapping opens the EV-TINYRAD24G
   evaluation board page on analog.com. Both show an `OpenInNew` icon and
   underlined text to indicate they are tappable.
+
+---
+
+## [2.11] — 2026-06-10
+
+### Bug fixes — BufferUnderflowException: data is real, not IQ pairs
+
+Log confirmed: `0x9032 read: 1032 bytes (chirp 0)` — data arrives correctly.
+Then immediately: `streamLoop exception: BufferUnderflowException`.
+
+**Root cause:** `parseCombinedBuffer` read each sample as TWO int16 values
+(I + Q), so the loop tried to read 128 × 4 × 2 = 1024 int16 = 2048 bytes
+from a 1024-byte buffer — exactly 2× overflow.
+
+**Correct data layout (from TinyRad.py):**
+```python
+Data = reshape(UsbData, (int(Len/4), 4))  # (128 samples, 4 Rx channels)
+```
+The ADC data is **real-valued int16** — one value per sample per Rx channel,
+not IQ pairs. The `Len = 512` int16 values reshape to `(128 × 4)`:
+128 time samples across 4 Rx channels. There is no separate Q component.
+
+**Fixes:**
+- `parseCombinedBuffer`: reads exactly `MEAS_LEN = 512` int16 values.
+  Sets `adcI[chirpRow][r][s] = value`, `adcQ[chirpRow][r][s] = 0`.
+- `processFrame`: now processes all 4 Rx channels with non-coherent power
+  summation (`rdMagSq[r][d] += re²+im²`) before converting to dB, matching
+  the TinyRad.py multi-channel processing approach.

@@ -318,18 +318,25 @@ class TinyRadUsbManager(private val context: Context) {
         adcOffset:  Int,
         chirpCount: Int,
         adcI:       Array<Array<FloatArray>>,
-        adcQ:       Array<Array<FloatArray>>
+        adcQ:       Array<Array<FloatArray>>   // kept for API compat; zeroed (real-only data)
     ) {
-        if (adcOffset + ADC_BYTES > buf.size) {
-            AppLog.warn("parseCombinedBuffer: adcOffset=$adcOffset buf.size=${buf.size} too small")
+        // TinyRad.py: Data = reshape(UsbData, (Len/4, 4))
+        // UsbData = MEAS_LEN int16 values = 512 shorts = 1024 bytes
+        // Reshape to (RAD_N=128, NR_CHN=4): row = one sample instant, col = Rx channel
+        // Data is real-valued — no separate Q channel.
+        // Layout in buffer: sample0_Rx0, sample0_Rx1, sample0_Rx2, sample0_Rx3,
+        //                   sample1_Rx0, sample1_Rx1, ...  (Rx interleaved, sample-major)
+        val needed = MEAS_LEN * 2   // 512 int16 × 2 bytes = 1024 bytes
+        if (adcOffset + needed > buf.size) {
+            AppLog.warn("parseCombinedBuffer: need ${adcOffset + needed} have ${buf.size}")
             return
         }
         val chirpRow = chirpCount % CHIRPS_PER_FRAME
-        val bb = ByteBuffer.wrap(buf, adcOffset, ADC_BYTES).order(ByteOrder.LITTLE_ENDIAN)
+        val bb = ByteBuffer.wrap(buf, adcOffset, needed).order(ByteOrder.LITTLE_ENDIAN)
         for (s in 0 until RAD_N) {
             for (r in 0 until NR_CHN) {
                 adcI[chirpRow][r][s] = bb.short.toFloat()
-                adcQ[chirpRow][r][s] = bb.short.toFloat()
+                adcQ[chirpRow][r][s] = 0f   // no Q channel — real ADC samples only
             }
         }
     }
@@ -489,24 +496,30 @@ class TinyRadUsbManager(private val context: Context) {
 
     private fun processFrame(
         adcI: Array<Array<FloatArray>>,
-        adcQ: Array<Array<FloatArray>>
+        adcQ: Array<Array<FloatArray>>   // Q is zero for this board (real ADC samples)
     ) {
         val rangeFftN = config.rangeFftSize.coerceAtLeast(RAD_N).nextPow2()
+        val dopplerN  = CHIRPS_PER_FRAME.nextPow2()
 
-        val rangeSpec = Array(CHIRPS_PER_FRAME) { c ->
-            complexFft(adcI[c][0], adcQ[c][0], rangeFftN)
+        // Non-coherent sum across all 4 Rx channels (TinyRad.py approach)
+        val rdMagSq = Array(rangeFftN / 2) { FloatArray(dopplerN) }
+        for (rxCh in 0 until NR_CHN) {
+            val rangeSpec = Array(CHIRPS_PER_FRAME) { c ->
+                complexFft(adcI[c][rxCh], adcQ[c][rxCh], rangeFftN)
+            }
+            for (r in 0 until rangeFftN / 2) {
+                val cI = FloatArray(CHIRPS_PER_FRAME) { c -> rangeSpec[c][r * 2] }
+                val cQ = FloatArray(CHIRPS_PER_FRAME) { c -> rangeSpec[c][r * 2 + 1] }
+                val ds = complexFft(cI, cQ, dopplerN)
+                for (d in 0 until dopplerN) {
+                    val re = ds[d * 2]; val im = ds[d * 2 + 1]
+                    rdMagSq[r][d] += re * re + im * im
+                }
+            }
         }
 
-        val dopplerN = CHIRPS_PER_FRAME.nextPow2()
-        val rdMag    = Array(rangeFftN / 2) { FloatArray(dopplerN) }
-        for (r in 0 until rangeFftN / 2) {
-            val cI = FloatArray(CHIRPS_PER_FRAME) { c -> rangeSpec[c][r * 2] }
-            val cQ = FloatArray(CHIRPS_PER_FRAME) { c -> rangeSpec[c][r * 2 + 1] }
-            val ds = complexFft(cI, cQ, dopplerN)
-            for (d in 0 until dopplerN) {
-                val re = ds[d * 2]; val im = ds[d * 2 + 1]
-                rdMag[r][d] = 10f * log10(re * re + im * im + 1e-12f)
-            }
+        val rdMag = Array(rangeFftN / 2) { r ->
+            FloatArray(dopplerN) { d -> 10f * log10(rdMagSq[r][d] / NR_CHN + 1e-12f) }
         }
 
         val rangeResM    = 3e8f / (2f * BW_HZ)
@@ -528,8 +541,9 @@ class TinyRadUsbManager(private val context: Context) {
             rangeBins = rangeFftN / 2, dopplerBins = dopplerN,
             rangeResM = rangeResM, dopplerResMs = dopplerResMs
         )
-        AppLog.debug("Frame $frameIndex: ${objects.size} object(s)  rangeRes=${"%.2f".format(rangeResM)}m")
+        AppLog.info("Frame ${'$'}frameIndex: ${'$'}{objects.size} obj  rangeRes=${'$'}{"%.2f".format(rangeResM)}m")
     }
+
 
     private fun complexFft(inI: FloatArray, inQ: FloatArray, n: Int): FloatArray {
         val out  = FloatArray(n * 2)
