@@ -834,3 +834,18 @@ reception, DSP processing, object detection, and display.
   old duplicate tail that was deleted), but `startRecording()` in
   `TinyRadViewModel` still called `.copy(recordingPath = path, ...)`.
   Removed the `recordingPath` named argument from that `.copy()` call.
+
+---
+
+## [3.0.2] — 2026-06-11
+
+### CI workflow v5 — release-only builds
+
+- **Debug APK job removed** entirely.
+- `build-release` now runs on every push to `main`/`develop` and all tags,
+  building both the release APK (`assembleRelease`) and the Play Store AAB
+  (`bundleRelease`) in a single job.
+- Both artifacts uploaded with 90-day retention.
+- `github-release` job unchanged — creates a GitHub Release on `v*` tag pushes,
+  attaching the signed release APK.
+- Pull requests still skip the build (signing secrets unavailable in fork PRs).
