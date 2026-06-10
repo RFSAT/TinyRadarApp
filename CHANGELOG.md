@@ -627,3 +627,15 @@ not IQ pairs. The `Len = 512` int16 values reshape to `(128 × 4)`:
 - `processFrame`: now processes all 4 Rx channels with non-coherent power
   summation (`rdMagSq[r][d] += re²+im²`) before converting to dB, matching
   the TinyRad.py multi-channel processing approach.
+
+---
+
+## [2.12] — 2026-06-10
+
+### Bug fixes
+
+- **Syntax error in `TinyRadUsbManager.kt` line 544**: the Python-based
+  line replacement in v2.11 escaped `$` as `${'$'}` (valid Python template
+  syntax) which ended up literally in the Kotlin source, producing
+  `Unresolved reference 'rem'` and `Syntax error: Expecting ','`. Fixed by
+  replacing the mangled string with correct Kotlin string interpolation.

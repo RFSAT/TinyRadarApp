@@ -541,7 +541,7 @@ class TinyRadUsbManager(private val context: Context) {
             rangeBins = rangeFftN / 2, dopplerBins = dopplerN,
             rangeResM = rangeResM, dopplerResMs = dopplerResMs
         )
-        AppLog.info("Frame ${'$'}frameIndex: ${'$'}{objects.size} obj  rangeRes=${'$'}{"%.2f".format(rangeResM)}m")
+        AppLog.info("Frame $frameIndex: ${objects.size} obj  rangeRes=${"%.2f".format(rangeResM)}m")
     }
 
 
