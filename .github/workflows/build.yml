@@ -11,13 +11,17 @@ env:
   JAVA_VERSION:      '17'
   JAVA_DISTRIBUTION: 'temurin'
 
+# ── NOTE ──────────────────────────────────────────────────────────────────────
+# Release APK and Google Play AAB builds are temporarily disabled while the
+# radar communication protocol is being validated on hardware.
+# Only the debug APK is built so the app can be sideloaded for testing.
+# Re-enable the 'release' and 'play-store' jobs once hardware testing passes.
+# ─────────────────────────────────────────────────────────────────────────────
+
 jobs:
-  build:
-    name: Build & Test
+  build-debug:
+    name: Build Debug APK
     runs-on: ubuntu-latest
-    outputs:
-      version_name: ${{ steps.version.outputs.name }}
-      version_code: ${{ steps.version.outputs.code }}
 
     steps:
       - name: Checkout
@@ -36,112 +40,50 @@ jobs:
       - name: Extract version
         id: version
         run: |
-          CODE=$(grep 'versionCode ' app/build.gradle | head -1 | tr -dc '0-9')
-          NAME=$(grep 'versionName '  app/build.gradle | head -1 \
+          NAME=$(grep 'versionName ' app/build.gradle | head -1 \
                    | sed 's/.*versionName[[:space:]]*"\([^"]*\)".*/\1/')
-          echo "code=$CODE" >> $GITHUB_OUTPUT
           echo "name=$NAME" >> $GITHUB_OUTPUT
-          echo "Version: $NAME ($CODE)"
+          echo "Version: $NAME"
 
-      - name: Run lint
-        run: ./gradlew lintRelease --stacktrace
+      - name: Run lint (warnings only — does not fail build)
+        run: ./gradlew lintDebug --stacktrace
         continue-on-error: true
 
       - name: Run unit tests
-        run: ./gradlew testReleaseUnitTest --stacktrace
+        run: ./gradlew testDebugUnitTest --stacktrace
         continue-on-error: true
 
-      - name: Decode keystore
-        if: env.KEYSTORE_BASE64 != ''
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Rename debug APK with version
         run: |
-          echo "$KEYSTORE_BASE64" | base64 --decode > $RUNNER_TEMP/keystore.jks
-          echo "KEYSTORE_PATH=$RUNNER_TEMP/keystore.jks" >> $GITHUB_ENV
+          mv app/build/outputs/apk/debug/app-debug.apk \
+             app/build/outputs/apk/debug/TinyRadApp_v${{ steps.version.outputs.name }}-debug.apk
 
-      - name: Build release APK
-        env:
-          KEY_ALIAS:      ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD:   ${{ secrets.KEY_PASSWORD }}
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-        run: ./gradlew assembleRelease --stacktrace
-
-      - name: Rename APK with version
-        run: |
-          mv app/build/outputs/apk/release/app-release.apk \
-             app/build/outputs/apk/release/TinyRadApp_v${{ steps.version.outputs.name }}.apk
-
-      - name: Upload release APK
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: TinyRadApp_v${{ steps.version.outputs.name }}-release
-          path: app/build/outputs/apk/release/TinyRadApp_v${{ steps.version.outputs.name }}.apk
-          retention-days: 90
+          name: TinyRadApp_v${{ steps.version.outputs.name }}-debug
+          path: app/build/outputs/apk/debug/TinyRadApp_v${{ steps.version.outputs.name }}-debug.apk
+          retention-days: 30
 
-      - name: Build release AAB
-        env:
-          KEY_ALIAS:      ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD:   ${{ secrets.KEY_PASSWORD }}
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-        run: ./gradlew bundleRelease --stacktrace
-
-      - name: Upload release AAB
-        uses: actions/upload-artifact@v4
-        with:
-          name: TinyRadApp_v${{ steps.version.outputs.name }}-PlayStore
-          path: app/build/outputs/bundle/release/app-release.aab
-          retention-days: 90
-
-  release:
-    name: Create GitHub Release
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download release APK
-        uses: actions/download-artifact@v4
-        with:
-          name: TinyRadApp_v${{ needs.build.outputs.version_name }}-release
-          path: artifacts/
-
-      - name: Download release AAB
-        uses: actions/download-artifact@v4
-        with:
-          name: TinyRadApp_v${{ needs.build.outputs.version_name }}-PlayStore
-          path: artifacts/
-
-      - name: Rename AAB
-        run: |
-          mv artifacts/app-release.aab \
-             artifacts/TinyRadApp_v${{ needs.build.outputs.version_name }}.aab
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: "TinyRadApp v${{ needs.build.outputs.version_name }}"
-          body: |
-            ## TinyRadApp v${{ needs.build.outputs.version_name }}
-
-            RFSAT Limited — ENACT Project (Horizon Europe Grant 101157101)
-
-            ### Artifacts
-            | File | Use |
-            |------|-----|
-            | `TinyRadApp_v*.apk` | Install directly on Android (sideloading) |
-            | `TinyRadApp_v*.aab` | Upload to Google Play Store |
-
-            ### Installing the APK
-            Download the APK, transfer to your Android device and install.
-            Enable **Install unknown apps** for your file manager if prompted.
-            An OTG USB adapter is required to connect the TinyRAD board.
-
-            ### Changelog
-            See [CHANGELOG.md](CHANGELOG.md) for details.
-          files: |
-            artifacts/TinyRadApp_v${{ needs.build.outputs.version_name }}.apk
-            artifacts/TinyRadApp_v${{ needs.build.outputs.version_name }}.aab
-          draft: false
-          prerelease: ${{ contains(needs.build.outputs.version_name, 'alpha') || contains(needs.build.outputs.version_name, 'beta') }}
+  # ── DISABLED — re-enable after hardware validation ──────────────────────────
+  #
+  # build-release:
+  #   name: Build Release APK + AAB
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - ...
+  #     - name: Build release APK
+  #       run: ./gradlew assembleRelease --stacktrace
+  #     - name: Build release AAB
+  #       run: ./gradlew bundleRelease --stacktrace
+  #
+  # release:
+  #   name: Create GitHub Release
+  #   needs: build-release
+  #   if: startsWith(github.ref, 'refs/tags/v')
+  #   steps:
+  #     - ...
+  # ───────────────────────────────────────────────────────────────────────────

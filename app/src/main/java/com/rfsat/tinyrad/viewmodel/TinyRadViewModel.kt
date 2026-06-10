@@ -19,6 +19,8 @@ import com.rfsat.tinyrad.data.repository.RecordingRepository
 import com.rfsat.tinyrad.data.usb.TinyRadUsbManager
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 // ─── Permission action — MUST match the action used in PendingIntent ──────────
 //

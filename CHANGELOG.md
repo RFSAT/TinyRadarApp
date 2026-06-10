@@ -441,3 +441,26 @@ return per trigger. Previous code omitted it — the board returned nothing.
 - Tapping an active chip clears back to ALL.
 - Auto-scroll to bottom follows the currently filtered view.
 - DEBUG entries brightened to 78% alpha for readability on the dark background.
+
+---
+
+## [2.5] — 2026-06-10
+
+### Bug fixes
+
+- **Missing coroutine imports** (`TinyRadViewModel`): `Dispatchers` and
+  `withContext` were used in the connect-on-IO-thread calls added in v2.3 but
+  only `launch` was imported from `kotlinx.coroutines`. Added:
+  `import kotlinx.coroutines.Dispatchers` and
+  `import kotlinx.coroutines.withContext`.
+
+### CI workflow changes
+
+- **Debug APK only** while hardware communication is being validated.
+  `assembleRelease` and `bundleRelease` (Google Play AAB) jobs are commented
+  out in `.github/workflows/build.yml` with a note explaining why.
+  Lint runs on the debug variant with `continue-on-error: true` so build
+  warnings do not block the APK.
+  Output artifact: `TinyRadApp_v<version>-debug.apk` (retained 30 days).
+  Re-enable the release jobs by uncommenting the disabled section once
+  hardware testing confirms the protocol is working.
