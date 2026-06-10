@@ -544,3 +544,31 @@ reconnect automatically.
   (`bmRequestType=0x02, bRequest=0x01, wValue=0x0000, wIndex=ep.address`)
   which is available on all API levels and is exactly what `clearHalt()`
   calls internally on API 28+.
+
+---
+
+## [2.9] — 2026-06-10
+
+### Bug fixes — ADC data not received (root cause confirmed from drain sizes)
+
+The drain in session 2 of the v2.8 log consumed exactly:
+  `520 + 1024 + 8 = 1552 bytes` — proving the board WAS sending data.
+
+`520 = 8 (ACK) + 512 (first USB packet of the 1024-byte ADC frame)`.
+This is the exact USB maxPacketSize (512 bytes, confirmed in log).
+
+**Root cause:** `readAck()` used `ackBuf = ByteArray(256)`. The board sends the
+8-byte ACK and the start of the 1024-byte ADC frame back-to-back, so fast that
+Android USB Host received them as a combined 520-byte packet. Since 520 > 256
+(buffer size), `bulkTransfer` returned -1 (overflow), which we logged as
+"ACK timeout".
+
+**Fix:** replaced the separate ACK-read + ADC-read with a single combined read
+into a `COMBINED_BYTES = 1032` buffer (8 ACK + 1024 ADC). The response is
+parsed based on actual byte count:
+- `n == 1032`: ACK at offset 0, ADC at offset 8
+- `n == 1024`: ADC only at offset 0 (no separate ACK)
+- `n > 8 && n < 1024`: partial read, second read attempted for remainder
+
+Drain buffer also increased to `COMBINED_BYTES` and repeat count raised to 6
+(one per trigger fired before abort) so stale sessions are fully flushed.
