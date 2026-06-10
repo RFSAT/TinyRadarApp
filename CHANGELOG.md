@@ -531,3 +531,16 @@ as commented-out YAML for easy re-enabling after hardware validation.
 If the board stops responding entirely (all ACKs return -1 including BrdGetUID),
 unplug and replug the USB cable to power-cycle the board firmware. The app will
 reconnect automatically.
+
+---
+
+## [2.8] — 2026-06-10
+
+### Bug fixes
+
+- **`clearHalt` requires API 28** (`TinyRadUsbManager`): `minSdk` is 26, so
+  calling `UsbDeviceConnection.clearHalt()` fails to compile. Replaced with a
+  direct USB `CLEAR_FEATURE(ENDPOINT_HALT)` control transfer
+  (`bmRequestType=0x02, bRequest=0x01, wValue=0x0000, wIndex=ep.address`)
+  which is available on all API levels and is exactly what `clearHalt()`
+  calls internally on API 28+.

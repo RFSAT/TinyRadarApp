@@ -304,15 +304,25 @@ class TinyRadUsbManager(private val context: Context) {
     // ── Init sequence — byte-exact from pcap, confirmed against TinyRad.py ────
 
     private fun initBoard(): Boolean {
-        // Clear any stall/halt state on both endpoints from a previous session.
-        // Without this, the board's USB endpoint may be in a halted state after
-        // a failed or incomplete previous session, causing immediate -1 on all reads.
-        usbConn?.clearHalt(epOut)
-        usbConn?.clearHalt(epIn)
+        // Clear any endpoint halt/stall state from a previous session.
+        // UsbDeviceConnection.clearHalt() requires API 28; we target API 26,
+        // so send the equivalent USB CLEAR_FEATURE(ENDPOINT_HALT) control
+        // transfer directly. bmRequestType=0x02 (endpoint), bRequest=1 (CLEAR_FEATURE),
+        // wValue=0 (ENDPOINT_HALT), wIndex=endpoint address.
+        fun clearHaltCompat(ep: UsbEndpoint?) {
+            ep ?: return
+            usbConn?.controlTransfer(
+                0x02,           // bmRequestType: host→device, standard, endpoint
+                0x01,           // bRequest: CLEAR_FEATURE
+                0x0000,         // wValue: ENDPOINT_HALT feature selector
+                ep.address,     // wIndex: endpoint address
+                null, 0, 200
+            )
+        }
+        clearHaltCompat(epOut)
+        clearHaltCompat(epIn)
 
         // Drain any bytes the board may have buffered from the previous session
-        // (e.g. a pending ADC frame that was never read). Read up to 3 packets
-        // with a very short timeout so we don't block if there's nothing there.
         val drainBuf = ByteArray(ADC_BYTES)
         repeat(3) {
             val n = usbConn?.bulkTransfer(epIn, drainBuf, drainBuf.size, 50) ?: 0
