@@ -396,3 +396,48 @@ return per trigger. Previous code omitted it — the board returned nothing.
 - `Rf_fStrt=24 GHz`, `Rf_fStop=24.256 GHz` → BW=256 MHz, fc=24.128 GHz
 - Range resolution = c/(2×256 MHz) ≈ 0.585 m
 - N=128 samples/chirp, chirp period=40 ms (from pcap StrtMeas frame)
+
+---
+
+## [2.3] — 2026-06-09
+
+### Bug fixes — crash on USB connection
+
+- **connect() on main thread**: `claimInterface()` performs a synchronous USB
+  operation that must not run on the Android main thread. On some devices this
+  causes an `android.os.NetworkOnMainThreadException`-style crash or a deadlock.
+  All three call sites (`BroadcastReceiver.onReceive`, `findAndConnect`,
+  `connectDevice`) now dispatch `usbManager.connect()` to `Dispatchers.IO`
+  and call `observeFrames()` back on the main thread via `withContext(Main)`.
+
+- **Unguarded exception in `observeFrames`**: any exception thrown inside the
+  `collect` lambda (e.g. from DSP processing) propagated to `viewModelScope`
+  and crashed the app. Wrapped with `try/catch` — exceptions are now logged
+  to the in-app Log screen as ERROR entries instead of crashing.
+
+---
+
+## [2.4] — 2026-06-10
+
+### New features
+
+**Log file on device** (`AppLog`):
+- Call `AppLog.init(context)` once from `MainActivity.onCreate()` — initialises
+  a `PrintWriter` to `<external-files>/TinyRAD/tinyrad_log.txt`.
+- Every entry is written with timestamp and level; flushed immediately on any
+  `ERROR` entry (so the last command before a crash is always on disk), and
+  every 20 entries otherwise.
+- Rotates automatically at 512 KB: current log renamed to `tinyrad_log_prev.txt`,
+  new file started — so the two most recent sessions are always retained.
+- File path is shown in a small hint bar at the top of the Log screen.
+- File is closed cleanly in `MainActivity.onDestroy()`.
+- To retrieve: `adb pull /sdcard/Android/data/com.rfsat.TinyRadApp/files/TinyRAD/tinyrad_log.txt`
+  (or browse with any file manager that can access app-specific external storage).
+
+**Log level filter chips** (`LogScreen`):
+- Horizontal chip strip above the log list: **ALL · ERRO · WARN · INFO · DEBU**.
+- Each chip shows the count for that level; only levels with at least one entry
+  are shown.
+- Tapping an active chip clears back to ALL.
+- Auto-scroll to bottom follows the currently filtered view.
+- DEBUG entries brightened to 78% alpha for readability on the dark background.

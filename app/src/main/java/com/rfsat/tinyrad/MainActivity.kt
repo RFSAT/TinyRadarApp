@@ -33,6 +33,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        AppLog.init(this)          // start file logging before anything else
+        AppLog.info("TinyRadApp started")
         handleUsbIntent(intent)
         setContent {
             TinyRadAppTheme {
@@ -60,6 +62,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         viewModel.usbManager.cleanup()
+        AppLog.close()
     }
 }
 

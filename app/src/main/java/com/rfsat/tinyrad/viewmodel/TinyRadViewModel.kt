@@ -67,8 +67,11 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
 
             if (granted && device != null) {
                 pendingDevice = null
-                usbManager.connect(device)
-                observeFrames()
+                // claimInterface must not run on the main thread on some Android versions
+                viewModelScope.launch(Dispatchers.IO) {
+                    usbManager.connect(device)
+                    withContext(Dispatchers.Main) { observeFrames() }
+                }
             } else {
                 pendingDevice = null
                 _uiState.update {
@@ -137,8 +140,10 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
 
         if (usbManager.hasPermission(device)) {
             AppLog.info("Permission already held — connecting directly")
-            usbManager.connect(device)
-            observeFrames()
+            viewModelScope.launch(Dispatchers.IO) {
+                usbManager.connect(device)
+                withContext(Dispatchers.Main) { observeFrames() }
+            }
         } else {
             AppLog.info("Requesting USB permission for ${device.deviceName}")
             pendingDevice = device
@@ -170,8 +175,10 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
             "PID=${device.productId.toString(16).uppercase()}"
         )
         if (usbManager.hasPermission(device)) {
-            usbManager.connect(device)
-            observeFrames()
+            viewModelScope.launch(Dispatchers.IO) {
+                usbManager.connect(device)
+                withContext(Dispatchers.Main) { observeFrames() }
+            }
         } else {
             pendingDevice = device
             _uiState.update { it.copy(connectionState = UsbConnectionState.REQUESTING_PERMISSION) }
@@ -205,7 +212,8 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
 
     private fun observeFrames() {
         viewModelScope.launch {
-            usbManager.frameFlow.filterNotNull().collect { frame ->
+            try {
+                usbManager.frameFlow.filterNotNull().collect { frame ->
                 val now = System.currentTimeMillis()
                 frameSamples.addLast(now)
                 while (frameSamples.size > 20) frameSamples.removeFirst()
@@ -227,6 +235,9 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
                         totalFrames    = frame.frameIndex
                     )
                 }
+            }
+            } catch (e: Exception) {
+                AppLog.error("observeFrames error: ${e::class.simpleName}: ${e.message}")
             }
         }
     }
