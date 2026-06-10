@@ -769,3 +769,57 @@ The FMCW array is electronically steered across ±90° by the 4 Rx beamformer;
 the `azimuthDeg` assignment in detection currently defaults to 0° (boresight)
 because true DBF requires per-channel phase processing. The full 180° is
 covered by the hardware — azimuth estimation is a future enhancement.
+
+---
+
+## [3.0] — 2026-06-10  ★ Major release
+
+### (1) CI workflow v4 — release APK re-enabled
+- Debug APK built on every push/PR (unchanged)
+- Release APK now built on every push to `main`/`develop` (hardware validated)
+- Play Store AAB built only on `v*` tag pushes
+- GitHub Release created automatically on tag push
+- Signing via repository secrets: `KEYSTORE_BASE64`, `KEY_ALIAS`,
+  `KEY_PASSWORD`, `STORE_PASSWORD`. Graceful fallback to unsigned build if
+  secrets are absent.
+
+### (2) About screen version auto-updates
+`AboutScreen` now reads `BuildConfig.VERSION_NAME` at runtime instead of
+a hardcoded string, so it always matches the current build.
+
+### (3) Detection sensitivity — lower thresholds
+CFAR threshold lowered to **6 dB** (from 10), minimum SNR to **3 dB**
+(from 8), training cells reduced to 4. The classifier filters weak
+returns after detection, so a low threshold produces more detections
+without excessive false-alarm rate in practice.
+
+### (4) Improved object classification
+Complete rewrite of `classifyAndTrack`:
+- Speed-primary rules: >20 m/s → vehicle; 0.2–6 m/s within 30 m → human;
+  6–12 m/s → vehicle; stationary + high SNR → vehicle
+- Confidence now accounts for speed match to walking speed, range, and SNR
+- Track age-out extended to 3 s (from 2 s)
+- Direction (`AHEAD`/`BEHIND`) derived from Doppler sign rather than
+  always `AHEAD`
+- Track matching uses range-resolution-relative threshold (`2 × rangeResM`)
+  instead of hard-coded 2 m
+
+### (5) Scanning / Tracking operating modes
+`RadarOperatingMode` enum with `SCANNING` and `TRACKING` states added to
+`TinyRadModels` and `TinyRadUiState`.
+
+State machine in `observeFrames` (ViewModel):
+- **SCANNING** → **TRACKING**: first frame with ≥1 detection; acquires
+  strongest-SNR object as track target
+- **TRACKING** → stays TRACKING: target track ID still visible
+- **TRACKING** → re-acquires: original target lost but other objects present
+- **TRACKING** → **SCANNING**: no detections in the frame
+
+`RadarScreen` top bar shows a colour-coded pill (cyan = SCANNING,
+orange = TRACKING) with target range/speed when tracking. An **Override**
+button appears only in TRACKING mode and calls `viewModel.overrideToScanning()`
+to force an immediate return to SCANNING.
+
+### (6) Version bump to 3.0
+First release with end-to-end validated USB communication, ADC data
+reception, DSP processing, object detection, and display.

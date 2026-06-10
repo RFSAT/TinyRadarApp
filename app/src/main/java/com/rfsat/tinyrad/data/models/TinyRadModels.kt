@@ -1,6 +1,14 @@
 package com.rfsat.tinyrad.data.models
 
-// ─── USB connection state ─────────────────────────────────────────────────────
+// ─── Radar operating mode ─────────────────────────────────────────────────────
+
+enum class RadarOperatingMode {
+    /** Scanning: full 180° coverage, moderate sensitivity, looking for new targets */
+    SCANNING,
+    /** Tracking: focused on strongest detected object, higher sensitivity gate */
+    TRACKING
+}
+
 
 enum class UsbConnectionState {
     DISCONNECTED,
@@ -92,42 +100,39 @@ data class TinyRadConfig(
     val startFreqGHz:   Float = 24.0f,
     val bandwidthMHz:   Float = 250f,
     val txPowerDbm:     Int   = 0,
-    // Timing — hardware parameters sent to board during init
+    // Timing
     val chirpDurationUs:Int   = 512,
     val chirpRepUs:     Int   = 1000,
     val framesPerSec:   Int   = 10,
-    // Chirp accumulation — how many chirps to collect per processed frame.
-    // Fewer chirps = faster updates, coarser Doppler resolution.
-    // More chirps = slower updates, finer Doppler resolution.
-    //   16 chirps × 40ms = 640ms/frame ≈ 1.5 fps  (good for fast detection)
-    //   32 chirps × 40ms = 1280ms/frame ≈ 0.8 fps
-    //   80 chirps × 40ms = 3200ms/frame ≈ 0.3 fps  (original, best Doppler res)
+    // Chirp accumulation (see v2.15 changelog for update rate vs Doppler res tradeoff)
     val chirpsPerFrame: Int   = 16,
     // Processing
     val rangeFftSize:   Int   = 256,
     val dopplerFftSize: Int   = 64,
     val cfar_guard:     Int   = 2,
-    val cfar_training:  Int   = 8,
-    val cfar_threshold: Float = 10f,    // lowered: 10 dB for wider detection coverage
-    // Detection gate — wide defaults for full 180° coverage
-    val maxRangeM:      Float = 100f,   // board spec: 100m max for RCS=1m²
+    val cfar_training:  Int   = 4,    // reduced: faster CFAR computation
+    val cfar_threshold: Float = 6f,   // lowered to 6 dB — detect weaker returns
+    // Detection gate — wide defaults, full 180° coverage
+    val maxRangeM:      Float = 100f,
     val maxSpeedMps:    Float = 50f,
-    val minSnrDb:       Float = 8f      // lowered: 8 dB catches weaker returns
+    val minSnrDb:       Float = 3f    // very low threshold — let classifier filter
 )
 
 // ─── App-level UI state ───────────────────────────────────────────────────────
 
 data class TinyRadUiState(
-    val connectionState:    UsbConnectionState  = UsbConnectionState.DISCONNECTED,
-    val deviceName:         String              = "TinyRAD (not connected)",
-    val isStreaming:         Boolean             = false,
-    val isRecording:         Boolean             = false,
-    val currentFrame:        RadarFrame?         = null,
+    val connectionState:    UsbConnectionState   = UsbConnectionState.DISCONNECTED,
+    val deviceName:         String               = "TinyRAD (not connected)",
+    val isStreaming:         Boolean              = false,
+    val isRecording:         Boolean              = false,
+    val currentFrame:        RadarFrame?          = null,
     val trackedObjects:      List<DetectedObject> = emptyList(),
-    val frameRate:           Float               = 0f,
-    val totalFrames:         Long                = 0L,
-    val recordingPath:       String?             = null,
-    val recordingRows:       Int                 = 0,
-    val config:              TinyRadConfig       = TinyRadConfig(),
-    val errorMessage:        String?             = null
+    val frameRate:           Float                = 0f,
+    val totalFrames:         Long                 = 0L,
+    val recordingRows:       Int                  = 0,
+    val config:              TinyRadConfig        = TinyRadConfig(),
+    val errorMessage:        String?              = null,
+    // Operating mode
+    val operatingMode:       RadarOperatingMode   = RadarOperatingMode.SCANNING,
+    val trackTargetId:       Int?                 = null   // which track ID is being followed
 )

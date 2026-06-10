@@ -645,35 +645,49 @@ class TinyRadUsbManager(private val context: Context) {
         val now = System.currentTimeMillis()
         val results = mutableListOf<DetectedObject>()
         for (det in detections) {
-            val dist=det.distanceM; val speed=abs(det.speedMps); val snr=det.snrDb
-            if (dist>config.maxRangeM||speed>config.maxSpeedMps||snr<config.minSnrDb) continue
+            val dist  = det.distanceM
+            val speed = abs(det.speedMps)
+            val snr   = det.snrDb
+            if (dist > config.maxRangeM || speed > config.maxSpeedMps || snr < config.minSnrDb) continue
+
             val cls = when {
-                dist>10f&&speed>15f         -> ObjectClass.AERIAL_VEHICLE
-                speed>5f&&snr>20f           -> ObjectClass.GROUND_VEHICLE
-                speed<1f&&snr>25f           -> ObjectClass.GROUND_VEHICLE
-                speed in 0.3f..4f&&dist<20f -> ObjectClass.HUMAN
-                speed in 0.1f..8f&&snr<20f  -> ObjectClass.ANIMAL
-                else                        -> ObjectClass.UNKNOWN
+                speed > 20f                          -> ObjectClass.GROUND_VEHICLE
+                speed > 10f && dist > 15f            -> ObjectClass.GROUND_VEHICLE
+                speed in 0.2f..6f && dist < 30f      -> ObjectClass.HUMAN
+                speed in 6f..12f && dist < 30f        -> ObjectClass.GROUND_VEHICLE
+                speed < 0.2f && snr > 15f             -> ObjectClass.GROUND_VEHICLE
+                else                                  -> ObjectClass.UNKNOWN
             }
-            val conf = when(cls) {
-                ObjectClass.HUMAN          -> (1f-dist/20f).coerceIn(0.4f,0.95f)
-                ObjectClass.GROUND_VEHICLE -> (snr/40f).coerceIn(0.5f,0.99f)
-                else                       -> 0.6f
+            val conf = when (cls) {
+                ObjectClass.HUMAN -> {
+                    val ss = 1f - abs(speed - 1.4f) / 6f
+                    val ds = 1f - (dist / 30f).coerceAtMost(1f)
+                    val ns = (snr / 25f).coerceIn(0f, 1f)
+                    ((ss + ds + ns) / 3f).coerceIn(0.35f, 0.92f)
+                }
+                ObjectClass.GROUND_VEHICLE ->
+                    ((snr / 30f) * (speed / 20f).coerceAtMost(1f)).coerceIn(0.4f, 0.95f)
+                else -> (snr / 30f).coerceIn(0.2f, 0.6f)
+            }
+            val dir = when {
+                det.speedMps > 0.5f  -> Direction.AHEAD
+                det.speedMps < -0.5f -> Direction.BEHIND
+                else                  -> Direction.AHEAD
             }
             val tid = tracker.entries
-                .minByOrNull{(_,p)->abs(p.distanceM-dist)+abs(p.speedMps-det.speedMps)}
-                ?.takeIf{(_,p)->abs(p.distanceM-dist)<2f}?.key ?: nextTrackId++
-            val obj = DetectedObject(
-                trackId=tid, objectClass=cls, distanceM=dist,
+                .minByOrNull { (_, p) -> abs(p.distanceM - dist) + abs(p.speedMps - det.speedMps) }
+                ?.takeIf { (_, p) -> abs(p.distanceM - dist) < 2f * det.rangeResM }?.key
+                ?: nextTrackId++
+            val obj = DetectedObject(trackId=tid, objectClass=cls, distanceM=dist,
                 azimuthDeg=0f, elevationDeg=0f, speedMps=det.speedMps,
-                direction=Direction.AHEAD, snrDb=snr, confidence=conf, timestampMs=now
-            )
-            tracker[tid]=obj; results.add(obj)
+                direction=dir, snrDb=snr, confidence=conf, timestampMs=now)
+            tracker[tid] = obj; results.add(obj)
         }
-        tracker.entries.filter{(_,v)->now-v.timestampMs>2000}
-            .map{it.key}.forEach{tracker.remove(it)}
-        return results.sortedBy{it.distanceM}
+        tracker.entries.filter { (_, v) -> now - v.timestampMs > 3000 }
+            .map { it.key }.forEach { tracker.remove(it) }
+        return results.sortedBy { it.distanceM }
     }
+
 
     fun sendConfig(cfg: TinyRadConfig) { config = cfg }
 }

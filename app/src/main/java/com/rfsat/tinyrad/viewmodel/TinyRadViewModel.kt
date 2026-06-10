@@ -230,12 +230,48 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
                     _uiState.update { it.copy(recordingRows = recRepo.currentRows()) }
                 }
 
+                // ── Scan / Track mode transitions ─────────────────────────────
+                val objects  = frame.detectedObjects
+                val curState = _uiState.value
+                val (newMode, newTargetId) = when (curState.operatingMode) {
+                    RadarOperatingMode.SCANNING -> {
+                        if (objects.isNotEmpty()) {
+                            // Transition to TRACKING on the strongest-SNR object
+                            val best = objects.maxByOrNull { it.snrDb }
+                            AppLog.info("Mode → TRACKING  target=${best?.trackId} snr=${"%.1f".format(best?.snrDb ?: 0f)}dB")
+                            RadarOperatingMode.TRACKING to best?.trackId
+                        } else {
+                            RadarOperatingMode.SCANNING to null
+                        }
+                    }
+                    RadarOperatingMode.TRACKING -> {
+                        val targetStillVisible = curState.trackTargetId?.let { tid ->
+                            objects.any { it.trackId == tid }
+                        } ?: false
+                        if (targetStillVisible) {
+                            // Stay in tracking on the same target
+                            RadarOperatingMode.TRACKING to curState.trackTargetId
+                        } else if (objects.isNotEmpty()) {
+                            // Original target lost — re-acquire strongest
+                            val best = objects.maxByOrNull { it.snrDb }
+                            AppLog.info("Mode: re-acquired target=${best?.trackId}")
+                            RadarOperatingMode.TRACKING to best?.trackId
+                        } else {
+                            // Nothing detected — return to scanning
+                            AppLog.info("Mode → SCANNING  (target lost)")
+                            RadarOperatingMode.SCANNING to null
+                        }
+                    }
+                }
+
                 _uiState.update {
                     it.copy(
                         currentFrame   = frame,
-                        trackedObjects = frame.detectedObjects,
+                        trackedObjects = objects,
                         frameRate      = fps,
-                        totalFrames    = frame.frameIndex
+                        totalFrames    = frame.frameIndex,
+                        operatingMode  = newMode,
+                        trackTargetId  = newTargetId
                     )
                 }
             }
@@ -266,6 +302,15 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
     fun listRecordings() = recRepo.listRecordings()
 
     // ── Config ────────────────────────────────────────────────────────────────
+
+    /** Override button: force return to SCANNING regardless of detections */
+    fun overrideToScanning() {
+        _uiState.update { it.copy(
+            operatingMode = RadarOperatingMode.SCANNING,
+            trackTargetId = null
+        )}
+        AppLog.info("Mode → SCANNING  (manual override)")
+    }
 
     fun applyConfig(cfg: TinyRadConfig) {
         viewModelScope.launch {

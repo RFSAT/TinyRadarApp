@@ -256,7 +256,8 @@ fun AboutScreen(onBack: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text("TinyRAD", fontWeight = FontWeight.Bold, color = RadarAccent, fontSize = 28.sp)
-            Text("v2.10", color = RadarOnSurface.copy(alpha = 0.6f))
+            Text("v${com.rfsat.tinyrad.BuildConfig.VERSION_NAME}",
+                color = RadarOnSurface.copy(alpha = 0.6f))
             Text("FMCW Radar Object Detection", color = RadarOnSurface, fontSize = 13.sp)
 
             HorizontalDivider(color = RadarSurface)

@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +47,7 @@ fun RadarScreen(viewModel: TinyRadViewModel, onDisconnect: () -> Unit) {
     val frame   = state.currentFrame
     val objects = state.trackedObjects
     var viewMode by remember { mutableStateOf(RadarViewMode.RANGE_DOPPLER) }
+    val trackTarget = objects.firstOrNull { it.trackId == state.trackTargetId }
 
     val rangeTimeBuffer = remember { ArrayDeque<FloatArray>(64) }
     LaunchedEffect(frame) {
@@ -69,8 +71,11 @@ fun RadarScreen(viewModel: TinyRadViewModel, onDisconnect: () -> Unit) {
             rangeResM     = frame?.rangeResM ?: (3e8f / (2f * 250e6f)),
             isRecording   = state.isRecording,
             recordingRows = state.recordingRows,
-            onRecord = { if (state.isRecording) viewModel.stopRecording() else viewModel.startRecording() },
-            onStop   = { viewModel.stopStreaming(); onDisconnect() }
+            operatingMode = state.operatingMode,
+            trackTarget   = trackTarget,
+            onRecord  = { if (state.isRecording) viewModel.stopRecording() else viewModel.startRecording() },
+            onStop    = { viewModel.stopStreaming(); onDisconnect() },
+            onOverride = { viewModel.overrideToScanning() }
         )
 
         // 180° semicircle — height = half of screen width
@@ -130,28 +135,69 @@ fun RadarScreen(viewModel: TinyRadViewModel, onDisconnect: () -> Unit) {
 // ── Top bar ───────────────────────────────────────────────────────────────────
 
 @Composable
-private fun TopBar(frameRate: Float, totalFrames: Long, rangeResM: Float,
-                   isRecording: Boolean, recordingRows: Int,
-                   onRecord: () -> Unit, onStop: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().background(RadarDarkMid)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment     = Alignment.CenterVertically) {
-        Column {
-            Text("Live Radar", fontWeight = FontWeight.Bold, color = RadarOnSurface, fontSize = 13.sp)
-            Text("${"%.2f".format(frameRate)} fps  •  frame $totalFrames  •  ${"%.2f".format(rangeResM)}m/bin",
-                color = RadarOnSurface.copy(alpha = 0.5f), fontSize = 10.sp)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (isRecording)
-                Text("REC $recordingRows", color = RadarError, fontSize = 11.sp,
-                    modifier = Modifier.align(Alignment.CenterVertically))
-            IconButton(onClick = onRecord, modifier = Modifier.size(36.dp)) {
-                Icon(if (isRecording) Icons.Default.StopCircle else Icons.Default.FiberManualRecord,
-                    null, tint = if (isRecording) RadarError else RadarOnSurface)
+private fun TopBar(
+    frameRate:    Float,
+    totalFrames:  Long,
+    rangeResM:    Float,
+    isRecording:  Boolean,
+    recordingRows: Int,
+    operatingMode: RadarOperatingMode,
+    trackTarget:   DetectedObject?,
+    onRecord:     () -> Unit,
+    onStop:       () -> Unit,
+    onOverride:   () -> Unit
+) {
+    val modeColor  = if (operatingMode == RadarOperatingMode.TRACKING) Color(0xFFFF6B35) else RadarAccent
+    val modeLabel  = if (operatingMode == RadarOperatingMode.TRACKING) "TRACKING" else "SCANNING"
+
+    Column(modifier = Modifier.fillMaxWidth().background(RadarDarkMid)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment     = Alignment.CenterVertically) {
+
+            // Left — mode badge + stats
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Mode pill
+                    Surface(shape = RoundedCornerShape(10.dp), color = modeColor.copy(alpha = 0.18f)) {
+                        Text(modeLabel, modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                            color = modeColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                    if (operatingMode == RadarOperatingMode.TRACKING && trackTarget != null) {
+                        Text("T${trackTarget.trackId}  ${"%.1f".format(trackTarget.distanceM)}m  " +
+                             "${"%.1f".format(abs(trackTarget.speedMps))}m/s",
+                            color = modeColor.copy(alpha = 0.85f), fontSize = 10.sp)
+                    }
+                }
+                Text("${"%.2f".format(frameRate)} fps  •  ${"%.2f".format(rangeResM)}m/bin  •  #$totalFrames",
+                    color = RadarOnSurface.copy(alpha = 0.45f), fontSize = 9.sp)
             }
-            IconButton(onClick = onStop, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Default.Stop, null, tint = RadarWarning)
+
+            // Right — buttons
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                if (isRecording)
+                    Text("REC $recordingRows", color = RadarError, fontSize = 10.sp,
+                        modifier = Modifier.align(Alignment.CenterVertically))
+                // Override button (only when tracking)
+                if (operatingMode == RadarOperatingMode.TRACKING) {
+                    TextButton(
+                        onClick = onOverride,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text("Override", color = modeColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                IconButton(onClick = onRecord, modifier = Modifier.size(32.dp)) {
+                    Icon(if (isRecording) Icons.Default.StopCircle else Icons.Default.FiberManualRecord,
+                        null, tint = if (isRecording) RadarError else RadarOnSurface.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp))
+                }
+                IconButton(onClick = onStop, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Stop, null, tint = RadarWarning, modifier = Modifier.size(18.dp))
+                }
             }
         }
     }
