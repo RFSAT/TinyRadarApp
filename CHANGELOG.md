@@ -495,3 +495,39 @@ Added workflow version number and changelog comment block at the top of
 `.github/workflows/build.yml` to track changes independently of app versions.
 Full release job (assembleRelease + bundleRelease + GitHub Release) preserved
 as commented-out YAML for easy re-enabling after hardware validation.
+
+---
+
+## [2.7] — 2026-06-10
+
+### Bug fixes — log screen crash + board jammed state
+
+**Log screen crash (Compose overload):**
+- During streaming, `0x9032` TX and ACK were logged as DEBUG on every chirp
+  trigger — 80 per FMCW frame × multiple entries = hundreds of log entries
+  per second. This flooded the `StateFlow`, causing rapid recomposition of
+  the `LazyColumn` and crashing the UI thread. Fixed by suppressing `0x9032`
+  TX/ACK debug lines in `sendCmd`/`readAck` (measurement frame count is
+  logged at INFO level instead).
+- `MAX_ENTRIES` reduced from 500 to 200 to further limit list size.
+- `LazyColumn` key changed from string concatenation
+  `"${timestamp}_${hash}"` to a plain integer index — eliminates per-item
+  string allocation during recomposition.
+
+**Board jammed after failed/incomplete session:**
+- After a session that did not complete a full measurement cycle, the board's
+  USB IN endpoint enters a halted/stall state. All subsequent `bulkTransfer`
+  reads return -1 immediately, even for `BrdGetUID`. Fixed by calling
+  `UsbDeviceConnection.clearHalt()` on both endpoints at the start of every
+  `initBoard()` call.
+- Added a drain loop (3 × 50ms reads) to consume any bytes the board left in
+  its TX buffer from a previous session (e.g. a pending ADC frame that was
+  never collected).
+- Added `Thread.sleep(200)` after `BrdRst` (0x9031) — the ADF5901/ADF5904/
+  ADF4159 RF ICs need time to power-cycle before accepting new SPI
+  configuration.
+
+### Note on power cycling
+If the board stops responding entirely (all ACKs return -1 including BrdGetUID),
+unplug and replug the USB cable to power-cycle the board firmware. The app will
+reconnect automatically.

@@ -137,10 +137,11 @@ fun LogScreen(onBack: () -> Unit) {
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    items(displayed,
-                        key = { "${it.timestamp.toEpochMilli()}_${it.message.hashCode()}" }
-                    ) { entry ->
-                        LogRow(entry)
+                    items(
+                        displayed.size,
+                        key = { it }     // stable int index — no string allocation per item
+                    ) { i ->
+                        LogRow(displayed[i])
                     }
                 }
             }

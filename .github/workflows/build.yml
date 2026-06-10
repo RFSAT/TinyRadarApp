@@ -1,9 +1,10 @@
-# TinyRadApp CI workflow — version 2
+# TinyRadApp CI workflow — version 3
 # Changes from v1: debug-only build; release/AAB disabled pending hardware validation
 #
 # Workflow changelog:
 #   v1 — initial: assembleRelease + bundleRelease + GitHub Release on tags
 #   v2 — debug APK only (assembleDebug); release jobs commented out
+#   v3 — no changes to jobs; workflow version bump to match app v2.7
 #        until USB communication protocol is confirmed working on hardware
 
 name: TinyRadApp CI

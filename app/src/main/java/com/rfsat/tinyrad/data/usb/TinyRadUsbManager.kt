@@ -304,6 +304,21 @@ class TinyRadUsbManager(private val context: Context) {
     // ── Init sequence — byte-exact from pcap, confirmed against TinyRad.py ────
 
     private fun initBoard(): Boolean {
+        // Clear any stall/halt state on both endpoints from a previous session.
+        // Without this, the board's USB endpoint may be in a halted state after
+        // a failed or incomplete previous session, causing immediate -1 on all reads.
+        usbConn?.clearHalt(epOut)
+        usbConn?.clearHalt(epIn)
+
+        // Drain any bytes the board may have buffered from the previous session
+        // (e.g. a pending ADC frame that was never read). Read up to 3 packets
+        // with a very short timeout so we don't block if there's nothing there.
+        val drainBuf = ByteArray(ADC_BYTES)
+        repeat(3) {
+            val n = usbConn?.bulkTransfer(epIn, drainBuf, drainBuf.size, 50) ?: 0
+            if (n > 0) AppLog.info("Drained $n stale bytes from IN endpoint")
+        }
+
         AppLog.info("Init: BrdGetUID…")
         if (!cmdAck(0x9030, intArrayOf(1, 0))) return false
 
@@ -312,6 +327,7 @@ class TinyRadUsbManager(private val context: Context) {
 
         AppLog.info("Init: BrdRst…")
         if (!cmdAck(0x9031, intArrayOf(1, 0))) return false
+        Thread.sleep(200)   // RF front-end needs time to power-cycle after reset
 
         AppLog.info("Init: SpiData Rx (ADF5904)…")
         if (!cmdAck(0x9017, intArrayOf(
@@ -393,7 +409,8 @@ class TinyRadUsbManager(private val context: Context) {
         for (d in data) frame.putInt(d)
 
         val n = conn.bulkTransfer(epOut, frame.array(), USB_OUT_SIZE, CMD_TIMEOUT_MS)
-        AppLog.debug("TX cmd=0x${cmd.hex4()} lenData=$lenData → $n bytes")
+        // Only log non-measurement commands — 0x9032 fires 80x per frame and floods the log
+        if (cmd != 0x9032) AppLog.debug("TX cmd=0x${cmd.hex4()} lenData=$lenData → $n bytes")
         return n
     }
 
@@ -419,7 +436,8 @@ class TinyRadUsbManager(private val context: Context) {
         val word0   = ByteBuffer.wrap(ackBuf, 0, 4).order(ByteOrder.LITTLE_ENDIAN).int
         val cmdEcho = word0 and 0xFFFF
         val lenData = (word0 shr 16) and 0xFF
-        AppLog.debug("ACK echo=0x${cmdEcho.hex4()} lenData=$lenData ($n bytes)")
+        // Suppress 0x9032 ACK noise during streaming — logged at frame level instead
+        if (cmdEcho != 0x9032) AppLog.debug("ACK echo=0x${cmdEcho.hex4()} lenData=$lenData ($n bytes)")
         return cmdEcho
     }
 

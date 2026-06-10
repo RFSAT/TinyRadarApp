@@ -29,7 +29,7 @@ data class LogEntry(
  */
 object AppLog {
 
-    private const val MAX_ENTRIES  = 500
+    private const val MAX_ENTRIES  = 200
     private const val MAX_LOG_BYTES = 512 * 1024L   // 512 KB before rotation
     private const val FLUSH_EVERY  = 20
 
