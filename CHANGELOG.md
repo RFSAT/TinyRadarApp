@@ -698,3 +698,23 @@ Range-Doppler and Range-Time panels.
 `window.addFlags(FLAG_KEEP_SCREEN_ON)` in `MainActivity.onCreate()` prevents
 the display from dimming or locking while the app is in the foreground.
 `WAKE_LOCK` permission added to `AndroidManifest.xml`.
+
+---
+
+## [2.14] — 2026-06-10
+
+### Bug fixes — three compile errors in RadarScreen.kt
+
+**`Path.addArc` wrong signature**: Compose `Path.addArc` takes an
+`androidx.compose.ui.geometry.Rect` as the `oval` parameter, not named
+`left/top/right/bottom` arguments. Fixed to:
+`addArc(oval = Rect(cx-r, cy-r, cx+r, cy+r), startAngleDegrees = 180f, sweepAngleDegrees = 180f)`
+
+**`nativeCanvas` access pattern wrong**: `drawContext.canvas.nativeCanvas.apply { drawText(...) }`
+fails because `.apply` runs in `android.graphics.Canvas` scope but the compiler
+can't infer the receiver. Replaced all occurrences with `drawIntoCanvas { canvas -> }`
+(Compose's safe native canvas accessor) and explicit `canvas.nativeCanvas.drawText(...)` calls.
+
+**`Float.MIN_VALUE` is positive in Kotlin**: Range-Time `gMax` initialised with
+`Float.MIN_VALUE` (= smallest positive float) instead of `-Float.MAX_VALUE`.
+Fixed so the max-search works correctly.
