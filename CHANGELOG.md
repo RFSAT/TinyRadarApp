@@ -572,3 +572,30 @@ parsed based on actual byte count:
 
 Drain buffer also increased to `COMBINED_BYTES` and repeat count raised to 6
 (one per trigger fired before abort) so stale sessions are fully flushed.
+
+---
+
+## [2.10] — 2026-06-10
+
+### Bug fixes — streaming crash + UI polish
+
+**streamLoop unhandled exception** (`TinyRadUsbManager`):
+- Added `try/catch` wrapping the entire trigger loop. Any exception is now
+  logged as ERROR (showing class name and message) and sets the connection
+  state to ERROR, so the cause appears in the Log screen.
+- Added `AppLog.info("Trigger loop starting…")` and `"…ended"` markers so
+  the log shows whether the loop ever ran — previously there was no entry
+  between "Board init complete" and the JobCancellationException.
+- Fixed `IllegalArgumentException` in the partial-read path: the second
+  `bulkTransfer` was called with `combinedBuf.size - n` which could be zero
+  or negative if `n == COMBINED_BYTES`. Now always passes `combinedBuf.size`.
+
+**Log screen — file path visibility**:
+- File path hint text alpha raised from 0.35 to 0.75 — the previous grey
+  was essentially invisible against the dark background.
+
+**About screen — clickable web links**:
+- "RFSAT Limited" row: tapping opens `https://www.rfsat.com` in browser.
+- "Analog Devices EV-TINYRAD24G" row: tapping opens the EV-TINYRAD24G
+  evaluation board page on analog.com. Both show an `OpenInNew` icon and
+  underlined text to indicate they are tappable.

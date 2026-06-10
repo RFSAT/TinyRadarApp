@@ -1,5 +1,7 @@
 package com.rfsat.tinyrad.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -7,16 +9,21 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -68,7 +75,7 @@ fun LogScreen(onBack: () -> Unit) {
 
             // ── Filter chips ─────────────────────────────────────────────────
             LazyRow(
-                modifier            = Modifier
+                modifier = Modifier
                     .fillMaxWidth()
                     .background(RadarDarkMid)
                     .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -77,11 +84,8 @@ fun LogScreen(onBack: () -> Unit) {
             ) {
                 item {
                     FilterChip(
-                        label    = "ALL",
-                        count    = allEntries.size,
-                        colour   = RadarAccent,
-                        selected = activeFilter == null,
-                        onClick  = { activeFilter = null }
+                        label = "ALL", count = allEntries.size, colour = RadarAccent,
+                        selected = activeFilter == null, onClick = { activeFilter = null }
                     )
                 }
                 items(LogLevel.entries.reversed()) { level ->
@@ -92,41 +96,35 @@ fun LogScreen(onBack: () -> Unit) {
                             count    = n,
                             colour   = levelColour(level),
                             selected = activeFilter == level,
-                            onClick  = {
-                                activeFilter = if (activeFilter == level) null else level
-                            }
+                            onClick  = { activeFilter = if (activeFilter == level) null else level }
                         )
                     }
                 }
             }
 
-            // ── Log file path hint ───────────────────────────────────────────
+            // ── Log file path — visible white/cream text, not invisible grey ─
             AppLog.logFilePath()?.let { path ->
                 Text(
                     "File: $path",
-                    color      = RadarOnSurface.copy(alpha = 0.35f),
+                    color      = RadarOnSurface.copy(alpha = 0.75f),   // was 0.35 — now readable
                     fontSize   = 9.sp,
                     fontFamily = FontFamily.Monospace,
                     maxLines   = 1,
                     overflow   = TextOverflow.Ellipsis,
                     modifier   = Modifier
                         .fillMaxWidth()
-                        .background(RadarDark)
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                        .background(RadarDarkMid)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }
 
             // ── Log list ─────────────────────────────────────────────────────
             if (displayed.isEmpty()) {
-                Box(
-                    modifier         = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
                         if (activeFilter != null) "No ${activeFilter!!.name} messages"
                         else "No log entries yet",
-                        color    = RadarOnSurface.copy(alpha = 0.4f),
-                        fontSize = 13.sp
+                        color = RadarOnSurface.copy(alpha = 0.4f), fontSize = 13.sp
                     )
                 }
             } else {
@@ -137,10 +135,7 @@ fun LogScreen(onBack: () -> Unit) {
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    items(
-                        displayed.size,
-                        key = { it }     // stable int index — no string allocation per item
-                    ) { i ->
+                    items(displayed.size, key = { it }) { i ->
                         LogRow(displayed[i])
                     }
                 }
@@ -153,11 +148,9 @@ fun LogScreen(onBack: () -> Unit) {
 
 @Composable
 private fun FilterChip(
-    label:    String,
-    count:    Int,
-    colour:   androidx.compose.ui.graphics.Color,
-    selected: Boolean,
-    onClick:  () -> Unit
+    label: String, count: Int,
+    colour: androidx.compose.ui.graphics.Color,
+    selected: Boolean, onClick: () -> Unit
 ) {
     val bg = if (selected) colour.copy(alpha = 0.22f) else RadarSurface.copy(alpha = 0.5f)
     Row(
@@ -166,7 +159,7 @@ private fun FilterChip(
             .background(bg)
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 4.dp),
-        verticalAlignment     = Alignment.CenterVertically,
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(
@@ -178,8 +171,7 @@ private fun FilterChip(
         )
         Text(
             count.toString(),
-            color    = if (selected) colour.copy(alpha = 0.8f)
-                       else RadarOnSurface.copy(alpha = 0.4f),
+            color    = if (selected) colour.copy(alpha = 0.8f) else RadarOnSurface.copy(alpha = 0.4f),
             fontSize = 10.sp
         )
     }
@@ -204,25 +196,18 @@ private fun LogRow(entry: LogEntry) {
     ) {
         Text(
             TIME_FMT.format(entry.timestamp),
-            color      = RadarAccent.copy(alpha = 0.65f),
-            fontSize   = 10.sp,
-            fontFamily = FontFamily.Monospace,
-            modifier   = Modifier.width(80.dp)
+            color = RadarAccent.copy(alpha = 0.65f), fontSize = 10.sp,
+            fontFamily = FontFamily.Monospace, modifier = Modifier.width(80.dp)
         )
         Text(
             entry.level.name.take(4),
-            color      = fg,
-            fontSize   = 10.sp,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            modifier   = Modifier.width(36.dp)
+            color = fg, fontSize = 10.sp, fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold, modifier = Modifier.width(36.dp)
         )
         Text(
             entry.message,
-            color      = fg,
-            fontSize   = 10.sp,
-            fontFamily = FontFamily.Monospace,
-            modifier   = Modifier.weight(1f)
+            color = fg, fontSize = 10.sp, fontFamily = FontFamily.Monospace,
+            modifier = Modifier.weight(1f)
         )
     }
 }
@@ -239,6 +224,12 @@ private fun levelColour(level: LogLevel) = when (level) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+
+    fun openUrl(url: String) {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -257,28 +248,85 @@ fun AboutScreen(onBack: () -> Unit) {
         containerColor = RadarDark
     ) { pad ->
         Column(
-            modifier            = Modifier.padding(pad).padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .padding(pad)
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("TinyRAD",   fontWeight = FontWeight.Bold,   color = RadarAccent, fontSize = 28.sp)
-            Text("v2.3",      color = RadarOnSurface.copy(alpha = 0.6f))
-            Text("FMCW Radar Object Detection",
-                color = RadarOnSurface, fontSize = 13.sp)
+            Text("TinyRAD", fontWeight = FontWeight.Bold, color = RadarAccent, fontSize = 28.sp)
+            Text("v2.10", color = RadarOnSurface.copy(alpha = 0.6f))
+            Text("FMCW Radar Object Detection", color = RadarOnSurface, fontSize = 13.sp)
 
             HorizontalDivider(color = RadarSurface)
 
-            InfoRow("Developer",  "RFSAT Limited")
-            InfoRow("Radar HW",   "Analog Devices EV-TINYRAD24G")
-            InfoRow("Firmware",   "R 3.0.3  (VID 0x064B / PID 0x7823)")
-            InfoRow("Interface",  "USB Host — vendor bulk (OTG)")
-            InfoRow("Licence",    "MIT © 2026 RFSAT Limited")
+            // Clickable RFSAT row
+            AboutLinkRow(
+                label  = "Developer",
+                value  = "RFSAT Limited",
+                url    = "https://www.rfsat.com",
+                onOpen = { openUrl("https://www.rfsat.com") }
+            )
+
+            // Clickable Analog Devices row
+            AboutLinkRow(
+                label  = "Radar HW",
+                value  = "Analog Devices EV-TINYRAD24G",
+                url    = "analog.com/eval-tinyrad",
+                onOpen = {
+                    openUrl(
+                        "https://www.analog.com/en/resources/evaluation-hardware-and-software/" +
+                        "evaluation-boards-kits/eval-tinyrad.html"
+                    )
+                }
+            )
+
+            InfoRow("Firmware",  "R 3.0.3  (VID 0x064B / PID 0x7823)")
+            InfoRow("Interface", "USB Host — vendor bulk (OTG)")
+            InfoRow("Licence",   "MIT © 2026 RFSAT Limited")
 
             HorizontalDivider(color = RadarSurface)
 
             Text(
                 "Object classes: Human · Animal · Ground Vehicle · Aerial Vehicle",
                 color = RadarOnSurface.copy(alpha = 0.55f), fontSize = 11.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun AboutLinkRow(label: String, value: String, url: String, onOpen: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onOpen)
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment     = Alignment.CenterVertically
+    ) {
+        Text(label, color = RadarOnSurface.copy(alpha = 0.5f), fontSize = 13.sp,
+            modifier = Modifier.width(90.dp))
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End
+        ) {
+            Text(
+                value,
+                color          = RadarAccent,
+                fontSize       = 13.sp,
+                fontWeight     = FontWeight.Medium,
+                textDecoration = TextDecoration.Underline
+            )
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                Icons.Default.OpenInNew,
+                contentDescription = "Open in browser",
+                tint     = RadarAccent.copy(alpha = 0.7f),
+                modifier = Modifier.size(13.dp)
             )
         }
     }

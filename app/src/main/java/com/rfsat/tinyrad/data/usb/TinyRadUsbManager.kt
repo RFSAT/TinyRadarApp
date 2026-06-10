@@ -248,85 +248,82 @@ class TinyRadUsbManager(private val context: Context) {
             return@withContext
         }
 
-        val combinedBuf = ByteArray(COMBINED_BYTES)   // ACK(8) + ADC(1024) in one read
-        val adcI   = Array(CHIRPS_PER_FRAME) { Array(NR_CHN) { FloatArray(RAD_N) } }
-        val adcQ   = Array(CHIRPS_PER_FRAME) { Array(NR_CHN) { FloatArray(RAD_N) } }
-        var chirpCount       = 0
+        val combinedBuf = ByteArray(COMBINED_BYTES)
+        val adcI = Array(CHIRPS_PER_FRAME) { Array(NR_CHN) { FloatArray(RAD_N) } }
+        val adcQ = Array(CHIRPS_PER_FRAME) { Array(NR_CHN) { FloatArray(RAD_N) } }
+        var chirpCount        = 0
         var consecutiveErrors = 0
 
-        while (isActive && usbConn != null) {
-            // Send 0x9032 trigger
-            val sent = sendCmd(0x9032, intArrayOf(1, 1, MEAS_LEN, 0))
-            if (sent <= 0) {
-                consecutiveErrors++
-                AppLog.warn("0x9032 send failed ($sent), errors=$consecutiveErrors")
-                if (consecutiveErrors > 5) { AppLog.error("Too many send failures"); break }
-                delay(50); continue
-            }
-
-            // The board sends the 8-byte ACK and the 1024-byte ADC data back-to-back,
-            // so fast that both arrive before our first read. Using a 256-byte ackBuf
-            // caused -1 (Android USB overflow when received > buffer size).
-            //
-            // The drain in session 2 confirmed the combined packet sizes:
-            //   520 bytes = 8 (ACK) + 512 (first USB packet of ADC data)
-            //   endpoint maxPacketSize = 512
-            //
-            // Solution: one large read that accommodates ACK + full ADC frame,
-            // then parse based on the actual byte count returned.
-            val n = usbConn!!.bulkTransfer(epIn, combinedBuf, combinedBuf.size, DATA_TIMEOUT_MS)
-            when {
-                n == ADC_BYTES + ACK_BYTES -> {
-                    // Perfect: ACK (8 bytes) immediately followed by ADC (1024 bytes)
-                    consecutiveErrors = 0
-                    parseCombinedBuffer(combinedBuf, ackOffset = 0, adcOffset = ACK_BYTES, chirpCount, adcI, adcQ)
-                }
-                n == ADC_BYTES -> {
-                    // ADC data only — no separate ACK (board sent data without ACK)
-                    consecutiveErrors = 0
-                    parseCombinedBuffer(combinedBuf, ackOffset = -1, adcOffset = 0, chirpCount, adcI, adcQ)
-                }
-                n > ACK_BYTES && n < ADC_BYTES -> {
-                    // Partial ADC data — board still sending, read the remainder
-                    val remaining = usbConn!!.bulkTransfer(
-                        epIn, combinedBuf, combinedBuf.size - n, DATA_TIMEOUT_MS
-                    )
-                    AppLog.debug("Partial read: $n + $remaining bytes")
-                    consecutiveErrors = 0
-                    // Use what we have even if remainder timed out
-                    parseCombinedBuffer(combinedBuf, ackOffset = if (n >= ACK_BYTES) 0 else -1,
-                        adcOffset = ACK_BYTES, chirpCount, adcI, adcQ)
-                }
-                n <= 0 -> {
+        AppLog.info("Trigger loop starting…")
+        try {
+            while (isActive && usbConn != null) {
+                val sent = sendCmd(0x9032, intArrayOf(1, 1, MEAS_LEN, 0))
+                if (sent <= 0) {
                     consecutiveErrors++
-                    AppLog.warn("0x9032 read: $n bytes, errors=$consecutiveErrors")
-                    if (consecutiveErrors > 10) { AppLog.error("Too many read errors"); break }
-                    continue
+                    AppLog.warn("0x9032 send failed ($sent), errors=$consecutiveErrors")
+                    if (consecutiveErrors > 5) { AppLog.error("Too many send failures"); break }
+                    delay(50); continue
                 }
-                else -> {
-                    AppLog.warn("0x9032 unexpected size: $n bytes")
-                    consecutiveErrors = 0
-                }
-            }
 
-            chirpCount++
-            if (chirpCount >= CHIRPS_PER_FRAME) {
-                processFrame(adcI, adcQ)
-                chirpCount = 0
+                // Single combined read — board sends ACK(8) + ADC(1024) back-to-back.
+                // combinedBuf (1032 bytes) fits both; parse based on actual byte count.
+                val n = usbConn!!.bulkTransfer(epIn, combinedBuf, combinedBuf.size, DATA_TIMEOUT_MS)
+                AppLog.debug("0x9032 read: $n bytes (chirp $chirpCount)")
+
+                when {
+                    n == COMBINED_BYTES -> {
+                        consecutiveErrors = 0
+                        parseCombinedBuffer(combinedBuf, adcOffset = ACK_BYTES, chirpCount, adcI, adcQ)
+                    }
+                    n == ADC_BYTES -> {
+                        consecutiveErrors = 0
+                        parseCombinedBuffer(combinedBuf, adcOffset = 0, chirpCount, adcI, adcQ)
+                    }
+                    n in (ACK_BYTES + 1) until ADC_BYTES -> {
+                        // Partial — try to read the remainder; safe only if space remains
+                        val remaining = usbConn!!.bulkTransfer(
+                            epIn, combinedBuf, combinedBuf.size, DATA_TIMEOUT_MS
+                        )
+                        AppLog.debug("Partial $n + remainder $remaining bytes")
+                        consecutiveErrors = 0
+                        parseCombinedBuffer(combinedBuf, adcOffset = ACK_BYTES, chirpCount, adcI, adcQ)
+                    }
+                    n <= 0 -> {
+                        consecutiveErrors++
+                        AppLog.warn("0x9032 read $n, errors=$consecutiveErrors")
+                        if (consecutiveErrors > 10) { AppLog.error("Too many read errors"); break }
+                        continue
+                    }
+                    else -> {
+                        AppLog.warn("0x9032 unexpected size: $n bytes")
+                        consecutiveErrors = 0
+                    }
+                }
+
+                chirpCount++
+                if (chirpCount >= CHIRPS_PER_FRAME) {
+                    processFrame(adcI, adcQ)
+                    chirpCount = 0
+                }
             }
+        } catch (e: Exception) {
+            AppLog.error("streamLoop exception: ${e::class.simpleName}: ${e.message}")
+            _connectionState.value = UsbConnectionState.ERROR
         }
+        AppLog.info("Trigger loop ended")
     }
 
-    /** Parse ADC samples from the combined receive buffer into adcI/adcQ arrays. */
     private fun parseCombinedBuffer(
         buf:        ByteArray,
-        ackOffset:  Int,   // offset of 8-byte ACK, or -1 if not present
-        adcOffset:  Int,   // offset where ADC int16 data starts
+        adcOffset:  Int,
         chirpCount: Int,
         adcI:       Array<Array<FloatArray>>,
         adcQ:       Array<Array<FloatArray>>
     ) {
-        if (adcOffset + ADC_BYTES > buf.size) return
+        if (adcOffset + ADC_BYTES > buf.size) {
+            AppLog.warn("parseCombinedBuffer: adcOffset=$adcOffset buf.size=${buf.size} too small")
+            return
+        }
         val chirpRow = chirpCount % CHIRPS_PER_FRAME
         val bb = ByteBuffer.wrap(buf, adcOffset, ADC_BYTES).order(ByteOrder.LITTLE_ENDIAN)
         for (s in 0 until RAD_N) {
