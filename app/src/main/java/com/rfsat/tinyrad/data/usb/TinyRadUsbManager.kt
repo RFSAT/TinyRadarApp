@@ -87,11 +87,13 @@ private const val USB_OUT_SIZE   = 2048
 // Measurement geometry — confirmed from pcap + TinyRad.py
 private const val RAD_N            = 128   // samples/chirp (StrtMeas N=128)
 private const val NR_CHN           = 4     // Rx channels
-private const val CHIRPS_PER_FRAME = 80    // chirp_idx 0,2,4…158
 private const val MEAS_LEN         = RAD_N * NR_CHN   // 512 int16 per trigger
 private const val ADC_BYTES        = MEAS_LEN * 2     // 1024 bytes per trigger
-private const val ACK_BYTES        = 8                // 8-byte ACK word
-private const val COMBINED_BYTES   = ACK_BYTES + ADC_BYTES  // 1032 — fits ACK + full ADC
+private const val ACK_BYTES        = 8
+private const val COMBINED_BYTES   = ACK_BYTES + ADC_BYTES  // 1032
+
+// Maximum chirp accumulation buffer — supports up to 128 chirps
+private const val MAX_CHIRPS = 128
 
 // Chirp period from pcap F367: 4_000_000 × 10 ns = 40 ms
 private const val CHIRP_PERIOD_10NS = 4_000_000
@@ -249,10 +251,12 @@ class TinyRadUsbManager(private val context: Context) {
         }
 
         val combinedBuf = ByteArray(COMBINED_BYTES)
-        val adcI = Array(CHIRPS_PER_FRAME) { Array(NR_CHN) { FloatArray(RAD_N) } }
-        val adcQ = Array(CHIRPS_PER_FRAME) { Array(NR_CHN) { FloatArray(RAD_N) } }
+        // Allocate for MAX_CHIRPS; actual chirps used = config.chirpsPerFrame
+        val adcI = Array(MAX_CHIRPS) { Array(NR_CHN) { FloatArray(RAD_N) } }
+        val adcQ = Array(MAX_CHIRPS) { Array(NR_CHN) { FloatArray(RAD_N) } }
         var chirpCount        = 0
         var consecutiveErrors = 0
+        var chirpsPerFrame    = config.chirpsPerFrame.coerceIn(4, MAX_CHIRPS)
 
         AppLog.info("Trigger loop starting…")
         try {
@@ -301,9 +305,11 @@ class TinyRadUsbManager(private val context: Context) {
                 }
 
                 chirpCount++
-                if (chirpCount >= CHIRPS_PER_FRAME) {
-                    processFrame(adcI, adcQ)
+                if (chirpCount >= chirpsPerFrame) {
+                    processFrame(adcI, adcQ, chirpsPerFrame)
                     chirpCount = 0
+                    // Re-read in case settings changed mid-stream
+                    chirpsPerFrame = config.chirpsPerFrame.coerceIn(4, MAX_CHIRPS)
                 }
             }
         } catch (e: Exception) {
@@ -331,7 +337,7 @@ class TinyRadUsbManager(private val context: Context) {
             AppLog.warn("parseCombinedBuffer: need ${adcOffset + needed} have ${buf.size}")
             return
         }
-        val chirpRow = chirpCount % CHIRPS_PER_FRAME
+        val chirpRow = chirpCount % MAX_CHIRPS
         val bb = ByteBuffer.wrap(buf, adcOffset, needed).order(ByteOrder.LITTLE_ENDIAN)
         for (s in 0 until RAD_N) {
             for (r in 0 until NR_CHN) {
@@ -496,20 +502,21 @@ class TinyRadUsbManager(private val context: Context) {
 
     private fun processFrame(
         adcI: Array<Array<FloatArray>>,
-        adcQ: Array<Array<FloatArray>>   // Q is zero for this board (real ADC samples)
+        adcQ: Array<Array<FloatArray>>,  // Q is zero for this board (real ADC samples)
+        nChirps: Int                     // actual chirps accumulated this frame
     ) {
         val rangeFftN = config.rangeFftSize.coerceAtLeast(RAD_N).nextPow2()
-        val dopplerN  = CHIRPS_PER_FRAME.nextPow2()
+        val dopplerN  = nChirps.nextPow2()
 
         // Non-coherent sum across all 4 Rx channels (TinyRad.py approach)
         val rdMagSq = Array(rangeFftN / 2) { FloatArray(dopplerN) }
         for (rxCh in 0 until NR_CHN) {
-            val rangeSpec = Array(CHIRPS_PER_FRAME) { c ->
+            val rangeSpec = Array(nChirps) { c ->
                 complexFft(adcI[c][rxCh], adcQ[c][rxCh], rangeFftN)
             }
             for (r in 0 until rangeFftN / 2) {
-                val cI = FloatArray(CHIRPS_PER_FRAME) { c -> rangeSpec[c][r * 2] }
-                val cQ = FloatArray(CHIRPS_PER_FRAME) { c -> rangeSpec[c][r * 2 + 1] }
+                val cI = FloatArray(nChirps) { c -> rangeSpec[c][r * 2] }
+                val cQ = FloatArray(nChirps) { c -> rangeSpec[c][r * 2 + 1] }
                 val ds = complexFft(cI, cQ, dopplerN)
                 for (d in 0 until dopplerN) {
                     val re = ds[d * 2]; val im = ds[d * 2 + 1]
@@ -527,7 +534,7 @@ class TinyRadUsbManager(private val context: Context) {
         val rangeResM    = 3e8f / (2f * bwHz)
         val lambda       = 3e8f / FC_HZ
         val chirpPeriodS = CHIRP_PERIOD_10NS * 10e-9.toFloat()
-        val dopplerResMs = lambda / (2f * CHIRPS_PER_FRAME * chirpPeriodS)
+        val dopplerResMs = lambda / (2f * nChirps * chirpPeriodS)
 
         val detections = cfarDetect(rdMag, rangeResM, dopplerResMs)
         val objects    = classifyAndTrack(detections)
@@ -543,7 +550,7 @@ class TinyRadUsbManager(private val context: Context) {
             rangeBins = rangeFftN / 2, dopplerBins = dopplerN,
             rangeResM = rangeResM, dopplerResMs = dopplerResMs
         )
-        AppLog.info("Frame $frameIndex: ${objects.size} obj  rangeRes=${"%.2f".format(rangeResM)}m")
+        AppLog.info("Frame $frameIndex: ${objects.size} obj  chirps=$nChirps  rangeRes=${"%.2f".format(rangeResM)}m")
     }
 
 

@@ -718,3 +718,54 @@ can't infer the receiver. Replaced all occurrences with `drawIntoCanvas { canvas
 **`Float.MIN_VALUE` is positive in Kotlin**: Range-Time `gMax` initialised with
 `Float.MIN_VALUE` (= smallest positive float) instead of `-Float.MAX_VALUE`.
 Fixed so the max-search works correctly.
+
+---
+
+## [2.15] — 2026-06-10
+
+### Configurable update rate + optimised default detection settings
+
+#### Update rate — code change required (not a settings-only fix)
+
+The bottleneck is the hardware chirp period: the board firmware is
+initialised with `StrtMeas: DspCmd=[1,1, 4_000_000, 128]` which sets each
+chirp to 40 ms. One complete original frame = 80 chirps × 40 ms = 3.2 s.
+This cannot be changed without modifying the firmware init sequence.
+
+**What was changed:**
+
+`CHIRPS_PER_FRAME` is no longer a hard-coded constant. It is now read from
+`config.chirpsPerFrame` (settable in Settings) on every frame boundary.
+`processFrame` now accepts `nChirps: Int` and sizes all FFT arrays accordingly.
+
+Effect on update rate (chirp period stays at 40 ms):
+
+| Chirps/frame | Frame time | Update rate |
+|---|---|---|
+| 4  | 160 ms | ~6.25 fps |
+| 8  | 320 ms | ~3.1 fps  |
+| **16** | **640 ms** | **~1.5 fps  ← new default** |
+| 32 | 1.3 s  | ~0.8 fps  |
+| 80 | 3.2 s  | ~0.3 fps  (original) |
+
+Fewer chirps = coarser Doppler resolution but faster display updates.
+For object detection (rather than precise velocity measurement), 16 chirps
+gives a good balance. The Settings screen now shows the expected fps next
+to the slider value.
+
+#### Optimised default detection settings
+
+Changed defaults in `TinyRadConfig` to cover the full 180° aperture and
+detect weaker returns:
+
+| Parameter | Old default | New default | Reason |
+|---|---|---|---|
+| `maxRangeM` | 50 m | **100 m** | Board spec: 100m for RCS=1m² |
+| `cfar_threshold` | 15 dB | **10 dB** | Catch weaker/edge returns |
+| `minSnrDb` | 10 dB | **8 dB** | Wider angular coverage |
+| `chirpsPerFrame` | 80 | **16** | ~1.5 fps update rate |
+
+The FMCW array is electronically steered across ±90° by the 4 Rx beamformer;
+the `azimuthDeg` assignment in detection currently defaults to 0° (boresight)
+because true DBF requires per-channel phase processing. The full 180° is
+covered by the hardware — azimuth estimation is a future enhancement.

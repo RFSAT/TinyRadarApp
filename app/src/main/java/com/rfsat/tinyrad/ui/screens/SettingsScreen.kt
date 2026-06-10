@@ -68,7 +68,32 @@ fun SettingsScreen(
                 }
             }
 
-            Section("Timing") {
+            Section("Timing & Update Rate") {
+                // Chirps per frame controls both update rate and Doppler resolution.
+                // Fewer chirps = faster updates, coarser velocity measurement.
+                // 16 chirps × 40ms/chirp = 640ms/frame ≈ 1.5 fps (recommended)
+                // 32 chirps × 40ms/chirp = 1.3s/frame  ≈ 0.8 fps
+                // 80 chirps × 40ms/chirp = 3.2s/frame  ≈ 0.3 fps (best Doppler)
+                Column {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Chirps per frame", color = RadarOnSurface, fontSize = 12.sp)
+                        Text("${cfg.chirpsPerFrame}  (~${"%.1f".format(1000f / (cfg.chirpsPerFrame * 40f))} fps)",
+                            color = RadarAccent, fontSize = 12.sp)
+                    }
+                    // Steps: 4, 8, 16, 32, 64, 80
+                    val steps = listOf(4, 8, 16, 32, 64, 80)
+                    val idx = steps.indexOfFirst { it >= cfg.chirpsPerFrame }.coerceAtLeast(0)
+                    Slider(
+                        value         = idx.toFloat(),
+                        onValueChange = { cfg = cfg.copy(chirpsPerFrame = steps[it.toInt().coerceIn(0, steps.size-1)]) },
+                        valueRange    = 0f..(steps.size - 1).toFloat(),
+                        steps         = steps.size - 2,
+                        colors        = SliderDefaults.colors(thumbColor = RadarAccent,
+                            activeTrackColor = RadarAccent, inactiveTrackColor = RadarSurface)
+                    )
+                    Text("4=fast/coarse  →  80=slow/precise Doppler",
+                        color = RadarOnSurface.copy(alpha = 0.45f), fontSize = 10.sp)
+                }
                 IntSliderField("Frames/second", cfg.framesPerSec, 1, 50) {
                     cfg = cfg.copy(framesPerSec = it)
                 }

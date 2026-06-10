@@ -89,23 +89,30 @@ data class RadarFrame(
 
 data class TinyRadConfig(
     // RF
-    val startFreqGHz:   Float = 24.0f,  // TinyRAD centre ~24 GHz
+    val startFreqGHz:   Float = 24.0f,
     val bandwidthMHz:   Float = 250f,
-    val txPowerDbm:     Int   = 0,       // 0 = max
-    // Timing
+    val txPowerDbm:     Int   = 0,
+    // Timing — hardware parameters sent to board during init
     val chirpDurationUs:Int   = 512,
     val chirpRepUs:     Int   = 1000,
     val framesPerSec:   Int   = 10,
+    // Chirp accumulation — how many chirps to collect per processed frame.
+    // Fewer chirps = faster updates, coarser Doppler resolution.
+    // More chirps = slower updates, finer Doppler resolution.
+    //   16 chirps × 40ms = 640ms/frame ≈ 1.5 fps  (good for fast detection)
+    //   32 chirps × 40ms = 1280ms/frame ≈ 0.8 fps
+    //   80 chirps × 40ms = 3200ms/frame ≈ 0.3 fps  (original, best Doppler res)
+    val chirpsPerFrame: Int   = 16,
     // Processing
     val rangeFftSize:   Int   = 256,
     val dopplerFftSize: Int   = 64,
     val cfar_guard:     Int   = 2,
     val cfar_training:  Int   = 8,
-    val cfar_threshold: Float = 15f,    // dB above noise floor
-    // Detection gate
-    val maxRangeM:      Float = 50f,
-    val maxSpeedMps:    Float = 30f,
-    val minSnrDb:       Float = 10f
+    val cfar_threshold: Float = 10f,    // lowered: 10 dB for wider detection coverage
+    // Detection gate — wide defaults for full 180° coverage
+    val maxRangeM:      Float = 100f,   // board spec: 100m max for RCS=1m²
+    val maxSpeedMps:    Float = 50f,
+    val minSnrDb:       Float = 8f      // lowered: 8 dB catches weaker returns
 )
 
 // ─── App-level UI state ───────────────────────────────────────────────────────
