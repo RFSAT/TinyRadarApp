@@ -253,7 +253,7 @@ class TinyRadUsbManager(private val context: Context) {
         var consecutiveErrors = 0
 
         while (isActive && usbConn != null) {
-            // Dsp_GetDat: send 0x9032 DspCmd=[1,1,Len,0]
+            // Send 0x9032 trigger
             val sent = sendCmd(0x9032, intArrayOf(1, 1, MEAS_LEN, 0))
             if (sent <= 0) {
                 consecutiveErrors++
@@ -262,19 +262,26 @@ class TinyRadUsbManager(private val context: Context) {
                 delay(50); continue
             }
 
-            // ConGetUsbData: read Len*2 bytes = ADC_BYTES
+            // Board sends ACK (8 bytes) IMMEDIATELY, then ADC data (~40ms later).
+            // Log confirmed: ACK arrives 1ms after TX, ADC data comes after chirp period.
+            // Correct order: read ACK first, then read ADC data.
+            val echo = readAck()
+            if (echo < 0) {
+                consecutiveErrors++
+                AppLog.warn("0x9032 ACK timeout, errors=$consecutiveErrors")
+                if (consecutiveErrors > 5) { AppLog.error("Too many ACK failures"); break }
+                continue
+            }
+
+            // Now read the ADC data block (arrives after the chirp period ~40ms)
             val n = usbConn!!.bulkTransfer(epIn, adcBuf, adcBuf.size, DATA_TIMEOUT_MS)
             if (n != ADC_BYTES) {
                 consecutiveErrors++
                 AppLog.warn("ADC read: expected $ADC_BYTES got $n, errors=$consecutiveErrors")
-                readAck()
                 if (consecutiveErrors > 10) { AppLog.error("Too many ADC errors"); break }
                 continue
             }
             consecutiveErrors = 0
-
-            // CmdRecv: read ACK
-            readAck()
 
             // Parse: interleaved Rx0..Rx3 IQ, RAD_N complex samples per channel
             val chirpRow = chirpCount % CHIRPS_PER_FRAME

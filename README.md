@@ -5,7 +5,7 @@
 Developed by **[RFSAT Limited](https://www.rfsat.com)** as part of the **ENACT** project, funded by the European Union under the Horizon Europe programme (Grant Agreement No. 101157101).
 
 [![Build APK](https://github.com/rfsat/TinyRadApp/actions/workflows/build.yml/badge.svg)](https://github.com/rfsat/TinyRadApp/actions/workflows/build.yml)
-![Version](https://img.shields.io/badge/version-2.5-brightgreen)
+![Version](https://img.shields.io/badge/version-2.6-brightgreen)
 ![Android](https://img.shields.io/badge/Android-API%2026%2B-3DDC84?logo=android)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.1-7F52FF?logo=kotlin)
 ![License](https://img.shields.io/badge/License-MIT-blue)

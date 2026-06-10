@@ -464,3 +464,34 @@ return per trigger. Previous code omitted it — the board returned nothing.
   Output artifact: `TinyRadApp_v<version>-debug.apk` (retained 30 days).
   Re-enable the release jobs by uncommenting the disabled section once
   hardware testing confirms the protocol is working.
+
+---
+
+## [2.6] — 2026-06-10
+
+### Bug fixes — ADC read order reversed (root cause of "Start Radar" crash)
+
+Log analysis confirmed the board sends responses in this order after 0x9032:
+  1. **8-byte ACK** — arrives ~1 ms after the trigger command
+  2. **1024-byte ADC data** — arrives ~40 ms later (after one chirp period)
+
+Previous code read in the wrong order (ADC first, ACK second). Because the
+ACK arrived first, `bulkTransfer(epIn, adcBuf, 1024)` received 8 bytes instead
+of 1024, logged "ADC read: expected 1024 got 8", hit the 10-error limit, and
+cancelled the streaming coroutine — appearing as a crash from the UI's
+perspective.
+
+Fixed streaming loop order:
+```
+sendCmd(0x9032) → readAck() [8 bytes] → bulkRead(adcBuf) [1024 bytes]
+```
+
+The `JobCancellationException: Job was cancelled` in `observeFrames` is not
+a crash — it is the normal result of `stopStreaming()` being called when the
+error loop broke. The try/catch in `observeFrames` correctly absorbs it.
+
+### CI workflow — version 2
+Added workflow version number and changelog comment block at the top of
+`.github/workflows/build.yml` to track changes independently of app versions.
+Full release job (assembleRelease + bundleRelease + GitHub Release) preserved
+as commented-out YAML for easy re-enabling after hardware validation.
