@@ -286,7 +286,7 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
     fun startRecording(tag: String = "") {
         viewModelScope.launch {
             val path = recRepo.startRecording(tag)
-            _uiState.update { it.copy(isRecording = true, recordingPath = path, recordingRows = 0) }
+            _uiState.update { it.copy(isRecording = true, recordingRows = 0) }
             AppLog.info("Recording started → $path")
         }
     }

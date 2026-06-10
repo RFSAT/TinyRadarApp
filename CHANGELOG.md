@@ -823,3 +823,14 @@ to force an immediate return to SCANNING.
 ### (6) Version bump to 3.0
 First release with end-to-end validated USB communication, ADC data
 reception, DSP processing, object detection, and display.
+
+---
+
+## [3.0.1] — 2026-06-10
+
+### Bug fix
+
+- **`recordingPath` removed from `TinyRadUiState`** in v3.0 (field was in the
+  old duplicate tail that was deleted), but `startRecording()` in
+  `TinyRadViewModel` still called `.copy(recordingPath = path, ...)`.
+  Removed the `recordingPath` named argument from that `.copy()` call.
