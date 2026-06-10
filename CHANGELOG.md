@@ -639,3 +639,62 @@ not IQ pairs. The `Len = 512` int16 values reshape to `(128 × 4)`:
   syntax) which ended up literally in the Kotlin source, producing
   `Unresolved reference 'rem'` and `Syntax error: Expecting ','`. Fixed by
   replacing the mangled string with correct Kotlin string interpolation.
+
+---
+
+## [2.13] — 2026-06-10
+
+### New features & fixes (seven items from user request)
+
+**1. 180° semicircle radar view**
+Full-width semicircle replaces the previous 1:1-aspect square PPI.
+Origin at bottom-centre, range increases upward, azimuth spans ±90°.
+Height = screen width ÷ 2 so it fits portrait without scrolling.
+Four range-arc rings with distance labels; azimuth spokes at ±90°/±45°/0°.
+
+**2. FPS display fixed**
+`frameSamples` rolling average replaced with a simple per-frame `1000ms / Δt`
+calculation. FPS now reflects the actual FMCW frame rate (~0.31 fps for
+80 chirps × 40ms/chirp = 3.2s/frame). Settings FPS slider changes the
+`config.framesPerSec` which the DSP pipeline uses; hardware chirp period
+is fixed at 40ms by the board firmware.
+
+**3. Range resolution now tracks settings**
+`processFrame` was using the hardcoded `BW_HZ = 256 MHz` constant instead
+of `config.bandwidthMHz`. Now uses `config.bandwidthMHz * 1e6f`. Per UG-1709
+the board has a max sweep bandwidth of 250 MHz → range resolution ≈ 0.60 m.
+`applyConfig` restarts streaming when active so hardware sees the new config.
+
+**4. Multi-object duplicate suppression (CFAR NMS)**
+Added Non-Maximum Suppression after CFAR: detections are sorted by SNR,
+then any detection within ±2 range bins AND ±2 Doppler bins of a stronger
+peak is suppressed. Eliminates duplicates from the same physical reflector.
+
+**5. Brighter object detection dots**
+Glow ring alpha 0.35→brighter, filled dot alpha 0.95, white centre highlight
+at 0.6 alpha. Dot radius 10+SNR/4 (was 8+SNR/5), minimum 8px.
+
+**6. Compact object list under radar view**
+Replaces the side-panel card list. Columns: Class · Dist · Speed · Dir ·
+Conf · SNR · Az°. Max height 160dp, scrollable. Colour-coded class dot.
+
+**7. CSV file viewer (RecordingsScreen → CsvViewerScreen)**
+Tap the TableChart icon on any recording to open it inline. Shows a
+horizontally-scrollable table with alternating row shading, header row,
+column widths, and a 500-row cap with a notice. Added
+`Screen.CsvViewer` route with URL-encoded path argument.
+
+**8. Four-panel bottom view (FMCW / Range-Doppler / DBF / Range-Time)**
+- FMCW: parameter table (bandwidth, range res, max range, histogram bins, etc.)
+- Range-Doppler: full heatmap using `radarColormap` colour scale
+- DBF: azimuth-range scatter of detected objects (-90° to +90°)
+- Range-Time: ring buffer of last 64 range profiles, scrolling waterfall
+
+**9. Radar colourmap**
+`radarColormap(v)` — cyan→blue→black→red→yellow→white — used by
+Range-Doppler and Range-Time panels.
+
+**10. Screen always-on**
+`window.addFlags(FLAG_KEEP_SCREEN_ON)` in `MainActivity.onCreate()` prevents
+the display from dimming or locking while the app is in the foreground.
+`WAKE_LOCK` permission added to `AndroidManifest.xml`.

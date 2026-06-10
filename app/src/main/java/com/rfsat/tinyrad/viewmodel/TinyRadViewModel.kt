@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 
 // ─── Permission action — MUST match the action used in PendingIntent ──────────
 //
@@ -215,14 +216,14 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
     private fun observeFrames() {
         viewModelScope.launch {
             try {
+                // FPS measured over complete FMCW frames (one frame = 80 chirps)
+                var lastFrameMs = 0L
                 usbManager.frameFlow.filterNotNull().collect { frame ->
                 val now = System.currentTimeMillis()
-                frameSamples.addLast(now)
-                while (frameSamples.size > 20) frameSamples.removeFirst()
-                val fps = if (frameSamples.size >= 2)
-                    1000f * (frameSamples.size - 1) /
-                        (frameSamples.last() - frameSamples.first()).toFloat()
+                val fps = if (lastFrameMs > 0 && now > lastFrameMs)
+                    1000f / (now - lastFrameMs).toFloat()
                 else 0f
+                lastFrameMs = now
 
                 if (_uiState.value.isRecording) {
                     recRepo.writeFrame(frame)
@@ -269,8 +270,16 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
     fun applyConfig(cfg: TinyRadConfig) {
         viewModelScope.launch {
             prefRepo.saveConfig(cfg)
-            usbManager.sendConfig(cfg)
             _uiState.update { it.copy(config = cfg) }
+            // If currently streaming, restart to apply new parameters to hardware
+            if (_uiState.value.isStreaming) {
+                usbManager.stopStreaming()
+                delay(200)
+                usbManager.startStreaming(cfg)
+                AppLog.info("Config applied — streaming restarted")
+            } else {
+                usbManager.sendConfig(cfg)
+            }
         }
     }
 

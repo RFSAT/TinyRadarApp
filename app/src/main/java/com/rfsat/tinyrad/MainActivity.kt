@@ -17,7 +17,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.core.content.IntentCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.navigation.NavType
 import androidx.navigation.compose.*
+import androidx.navigation.navArgument
 import com.rfsat.tinyrad.data.models.UsbConnectionState
 import com.rfsat.tinyrad.data.repository.AppLog
 import com.rfsat.tinyrad.data.repository.LogLevel
@@ -33,7 +35,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-        AppLog.init(this)          // start file logging before anything else
+        // Keep screen on while this app is in the foreground
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        AppLog.init(this)
         AppLog.info("TinyRadApp started")
         handleUsbIntent(intent)
         setContent {
@@ -185,9 +189,22 @@ fun TinyRadApp(viewModel: TinyRadViewModel) {
             }
             composable(Screen.Recordings.route) {
                 RecordingsScreen(
-                    viewModel = viewModel,
-                    onBack    = { navController.popBackStack() }
+                    viewModel   = viewModel,
+                    onBack      = { navController.popBackStack() },
+                    onViewFile  = { path ->
+                        navController.navigate(Screen.CsvViewer.route(path))
+                    }
                 )
+            }
+            composable(
+                route     = Screen.CsvViewer.route,
+                arguments = listOf(androidx.navigation.navArgument("path") {
+                    type = androidx.navigation.NavType.StringType
+                })
+            ) { back ->
+                val encodedPath = back.arguments?.getString("path") ?: ""
+                val path = java.net.URLDecoder.decode(encodedPath, "UTF-8")
+                CsvViewerScreen(filePath = path, onBack = { navController.popBackStack() })
             }
             composable(Screen.Log.route) {
                 LogScreen(onBack = { navController.popBackStack() })

@@ -522,7 +522,9 @@ class TinyRadUsbManager(private val context: Context) {
             FloatArray(dopplerN) { d -> 10f * log10(rdMagSq[r][d] / NR_CHN + 1e-12f) }
         }
 
-        val rangeResM    = 3e8f / (2f * BW_HZ)
+        // Physics: use configured bandwidth (default 250 MHz per UG-1709 spec)
+        val bwHz         = config.bandwidthMHz * 1e6f
+        val rangeResM    = 3e8f / (2f * bwHz)
         val lambda       = 3e8f / FC_HZ
         val chirpPeriodS = CHIRP_PERIOD_10NS * 10e-9.toFloat()
         val dopplerResMs = lambda / (2f * CHIRPS_PER_FRAME * chirpPeriodS)
@@ -595,7 +597,7 @@ class TinyRadUsbManager(private val context: Context) {
     private fun cfarDetect(
         rdMag: Array<FloatArray>, rangeResM: Float, dopplerResMs: Float
     ): List<RawDetection> {
-        val res = mutableListOf<RawDetection>()
+        val raw = mutableListOf<RawDetection>()
         val nr = rdMag.size; val nd = rdMag.firstOrNull()?.size ?: 0
         val g = config.cfar_guard; val tr = config.cfar_training; val thr = config.cfar_threshold
         for (r in (g+tr) until (nr-g-tr)) {
@@ -605,10 +607,31 @@ class TinyRadUsbManager(private val context: Context) {
                     if (abs(dr)>g || abs(dd)>g) { sum+=rdMag[r+dr][d+dd]; cnt++ }
                 val noise = if (cnt>0) sum/cnt else 0f
                 if (cell-noise >= thr)
-                    res.add(RawDetection(r, d, cell-noise, rangeResM, dopplerResMs))
+                    raw.add(RawDetection(r, d, cell-noise, rangeResM, dopplerResMs))
             }
         }
-        return res
+
+        // Non-maximum suppression: merge detections within 2 range bins AND 2 Doppler bins.
+        // Keep the peak (highest SNR) within each cluster.
+        val merged = mutableListOf<RawDetection>()
+        val used   = BooleanArray(raw.size)
+        val sorted = raw.sortedByDescending { it.snrDb }
+        for (i in sorted.indices) {
+            if (used[i]) continue
+            val peak = sorted[i]
+            merged.add(peak)
+            // Suppress neighbours within merge radius
+            for (j in i+1 until sorted.size) {
+                if (used[j]) continue
+                val other = sorted[j]
+                if (abs(other.rangeBin - peak.rangeBin) <= 2 &&
+                    abs(other.dopplerBin - peak.dopplerBin) <= 2) {
+                    used[j] = true
+                }
+            }
+            used[i] = true
+        }
+        return merged
     }
 
     private fun classifyAndTrack(detections: List<RawDetection>): List<DetectedObject> {

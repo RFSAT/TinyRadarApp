@@ -27,7 +27,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RecordingsScreen(viewModel: TinyRadViewModel, onBack: () -> Unit) {
+fun RecordingsScreen(viewModel: TinyRadViewModel, onBack: () -> Unit, onViewFile: (String) -> Unit = {}) {
     val context = LocalContext.current
     var files   by remember { mutableStateOf(viewModel.listRecordings()) }
     var deleteTarget by remember { mutableStateOf<File?>(null) }
@@ -73,6 +73,7 @@ fun RecordingsScreen(viewModel: TinyRadViewModel, onBack: () -> Unit) {
                             }
                             context.startActivity(Intent.createChooser(intent, "Share CSV"))
                         },
+                        onView   = { onViewFile(file.absolutePath) },
                         onDelete = { deleteTarget = file }
                     )
                 }
@@ -101,7 +102,7 @@ fun RecordingsScreen(viewModel: TinyRadViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun RecordingItem(file: File, onShare: () -> Unit, onDelete: () -> Unit) {
+private fun RecordingItem(file: File, onShare: () -> Unit, onDelete: () -> Unit, onView: () -> Unit) {
     val sdf = remember { SimpleDateFormat("dd MMM yyyy HH:mm", Locale.getDefault()) }
     Card(
         shape  = RoundedCornerShape(10.dp),
@@ -119,8 +120,9 @@ private fun RecordingItem(file: File, onShare: () -> Unit, onDelete: () -> Unit)
                     fontSize = 11.sp
                 )
             }
-            IconButton(onClick = onShare)  { Icon(Icons.Default.Share,  "Share",  tint = RadarAccent) }
-            IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, "Delete", tint = RadarError) }
+            IconButton(onClick = onView)   { Icon(Icons.Default.TableChart, "View",   tint = RadarAccent) }
+            IconButton(onClick = onShare)  { Icon(Icons.Default.Share,      "Share",  tint = RadarAccent) }
+            IconButton(onClick = onDelete) { Icon(Icons.Default.Delete,     "Delete", tint = RadarError) }
         }
     }
 }

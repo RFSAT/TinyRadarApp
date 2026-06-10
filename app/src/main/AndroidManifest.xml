@@ -8,6 +8,7 @@
     <uses-feature android:name="android.hardware.usb.host" android:required="true" />
 
     <!-- Storage: write access required only on Android 9 (API 28) and below -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
