@@ -5,16 +5,16 @@ plugins {
 }
 
 android {
-    namespace 'com.rfsat.tinyrad'
+    namespace 'com.TinyRAD'
     compileSdk 35
     buildToolsVersion "35.0.0"
 
     defaultConfig {
-        applicationId "com.rfsat.TinyRadApp"
+        applicationId "com.TinyRAD"
         minSdk 26
         targetSdk 35
-        versionCode 33
-        versionName "3.0.3"
+        versionCode 34
+        versionName "3.0.4"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

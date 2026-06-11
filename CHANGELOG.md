@@ -879,3 +879,21 @@ classification).  Removed — the build now runs unconditionally.  If the
 - Both `assembleRelease` (APK) and `bundleRelease` (AAB) always built
 - Artifacts uploaded as separate named items with 90-day retention
 - `github-release` unchanged — fires on `v*` tags only
+
+---
+
+## [3.0.4] — 2026-06-11
+
+### Package name changed to com.TinyRAD
+
+Google Play Store requires the package name `com.TinyRAD`.
+
+Changed in all locations:
+- `build.gradle`: `namespace` and `applicationId`
+- All 17 Kotlin source files: `package` declarations and `import` statements
+- `AndroidManifest.xml`: any explicit package references
+- Source directory moved from `com/rfsat/tinyrad/` → `com/TinyRAD/`
+- `BuildConfig` reference in `AboutScreen` updated to `com.TinyRAD.BuildConfig`
+
+`FileProvider` authority uses `${applicationId}.fileprovider` (unchanged — 
+resolves at build time from `applicationId`).

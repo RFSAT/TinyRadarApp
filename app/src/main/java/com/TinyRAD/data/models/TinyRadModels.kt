@@ -1,0 +1,138 @@
+package com.TinyRAD.data.models
+
+// ─── Radar operating mode ─────────────────────────────────────────────────────
+
+enum class RadarOperatingMode {
+    /** Scanning: full 180° coverage, moderate sensitivity, looking for new targets */
+    SCANNING,
+    /** Tracking: focused on strongest detected object, higher sensitivity gate */
+    TRACKING
+}
+
+
+enum class UsbConnectionState {
+    DISCONNECTED,
+    REQUESTING_PERMISSION,
+    CONNECTING,
+    CONNECTED,
+    ERROR
+}
+
+// ─── Object classification ────────────────────────────────────────────────────
+
+enum class ObjectClass(val displayName: String, val colorArgb: Long) {
+    HUMAN           ("Human",           0xFF43C59E),
+    ANIMAL          ("Animal",          0xFFFFB347),
+    GROUND_VEHICLE  ("Ground Vehicle",  0xFF6FA8DC),
+    AERIAL_VEHICLE  ("Aerial Vehicle",  0xFFCC99FF),
+    UNKNOWN         ("Unknown",         0xFF888888)
+}
+
+// ─── Direction (azimuth sectors) ─────────────────────────────────────────────
+
+enum class Direction(val displayName: String, val azimuthDeg: Float) {
+    AHEAD       ("Ahead",        0f),
+    AHEAD_RIGHT ("Ahead-Right",  45f),
+    RIGHT       ("Right",        90f),
+    BEHIND_RIGHT("Behind-Right", 135f),
+    BEHIND      ("Behind",       180f),
+    BEHIND_LEFT ("Behind-Left", -135f),
+    LEFT        ("Left",        -90f),
+    AHEAD_LEFT  ("Ahead-Left",  -45f)
+}
+
+// ─── Detected object ─────────────────────────────────────────────────────────
+//
+// A single tracked object returned by the TinyRAD DSP pipeline.
+// All values are in SI units or degrees where stated.
+
+data class DetectedObject(
+    val trackId:        Int,            // Persistent track identifier
+    val objectClass:    ObjectClass,
+    val distanceM:      Float,          // Slant range, metres
+    val azimuthDeg:     Float,          // Horizontal angle, degrees (0 = boresight)
+    val elevationDeg:   Float,          // Vertical angle, degrees (0 = horizontal)
+    val speedMps:       Float,          // Radial velocity, m/s (+ = approaching)
+    val direction:      Direction,      // Quantised approach direction
+    val snrDb:          Float,          // Signal-to-noise ratio, dB
+    val confidence:     Float,          // Classifier confidence 0..1
+    val timestampMs:    Long            // System.currentTimeMillis() of detection
+) {
+    /** Speed in km/h for display */
+    val speedKmh: Float get() = speedMps * 3.6f
+
+    /** True when object is approaching the radar */
+    val isApproaching: Boolean get() = speedMps > 0.1f
+
+    /** True when object is receding */
+    val isReceding: Boolean get() = speedMps < -0.1f
+}
+
+// ─── Per-frame radar data ─────────────────────────────────────────────────────
+//
+// Raw ADC snapshot and processed results for one radar chirp frame.
+
+data class RadarFrame(
+    val frameIndex:     Long,
+    val timestampMs:    Long,
+    val detectedObjects: List<DetectedObject>,
+    // Range-Doppler magnitude matrix (rows = range bins, cols = Doppler bins)
+    // Stored as a flat array: index = row * dopplerBins + col
+    val rangeDopplerMag: FloatArray = FloatArray(0),
+    val rangeBins:      Int = 0,
+    val dopplerBins:    Int = 0,
+    val rangeResM:      Float = 0f,     // metres per range bin
+    val dopplerResMs:   Float = 0f      // m/s per Doppler bin
+) {
+    // FloatArray in data class — override equals/hashCode manually
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is RadarFrame) return false
+        return frameIndex == other.frameIndex && timestampMs == other.timestampMs
+    }
+    override fun hashCode(): Int = frameIndex.hashCode() * 31 + timestampMs.hashCode()
+}
+
+// ─── TinyRAD configuration ────────────────────────────────────────────────────
+
+data class TinyRadConfig(
+    // RF
+    val startFreqGHz:   Float = 24.0f,
+    val bandwidthMHz:   Float = 250f,
+    val txPowerDbm:     Int   = 0,
+    // Timing
+    val chirpDurationUs:Int   = 512,
+    val chirpRepUs:     Int   = 1000,
+    val framesPerSec:   Int   = 10,
+    // Chirp accumulation (see v2.15 changelog for update rate vs Doppler res tradeoff)
+    val chirpsPerFrame: Int   = 16,
+    // Processing
+    val rangeFftSize:   Int   = 256,
+    val dopplerFftSize: Int   = 64,
+    val cfar_guard:     Int   = 2,
+    val cfar_training:  Int   = 4,    // reduced: faster CFAR computation
+    val cfar_threshold: Float = 6f,   // lowered to 6 dB — detect weaker returns
+    // Detection gate — wide defaults, full 180° coverage
+    val maxRangeM:      Float = 100f,
+    val maxSpeedMps:    Float = 50f,
+    val minSnrDb:       Float = 3f    // very low threshold — let classifier filter
+)
+
+// ─── App-level UI state ───────────────────────────────────────────────────────
+
+data class TinyRadUiState(
+    val connectionState:    UsbConnectionState   = UsbConnectionState.DISCONNECTED,
+    val deviceName:         String               = "TinyRAD (not connected)",
+    val isStreaming:         Boolean              = false,
+    val isRecording:         Boolean              = false,
+    val currentFrame:        RadarFrame?          = null,
+    val trackedObjects:      List<DetectedObject> = emptyList(),
+    val frameRate:           Float                = 0f,
+    val totalFrames:         Long                 = 0L,
+    val recordingRows:       Int                  = 0,
+    val config:              TinyRadConfig        = TinyRadConfig(),
+    val errorMessage:        String?              = null,
+    // Operating mode
+    val operatingMode:       RadarOperatingMode   = RadarOperatingMode.SCANNING,
+    val trackTargetId:       Int?                 = null   // which track ID is being followed
+)
