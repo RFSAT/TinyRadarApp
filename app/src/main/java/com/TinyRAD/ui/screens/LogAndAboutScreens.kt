@@ -1,5 +1,7 @@
 package com.TinyRAD.ui.screens
 
+import com.TinyRAD.BuildConfig
+
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -256,7 +258,7 @@ fun AboutScreen(onBack: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text("TinyRAD", fontWeight = FontWeight.Bold, color = RadarAccent, fontSize = 28.sp)
-            Text("v${com.TinyRAD.BuildConfig.VERSION_NAME}",
+            Text("v${BuildConfig.VERSION_NAME}",
                 color = RadarOnSurface.copy(alpha = 0.6f))
             Text("FMCW Radar Object Detection", color = RadarOnSurface, fontSize = 13.sp)
 
