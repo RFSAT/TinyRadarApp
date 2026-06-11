@@ -1,4 +1,4 @@
-package com.rfsat.tinyrad.viewmodel
+package com.TinyRAD.viewmodel
 
 import android.app.Application
 import android.app.PendingIntent
@@ -12,11 +12,11 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.rfsat.tinyrad.data.models.*
-import com.rfsat.tinyrad.data.repository.AppLog
-import com.rfsat.tinyrad.data.repository.PreferencesRepository
-import com.rfsat.tinyrad.data.repository.RecordingRepository
-import com.rfsat.tinyrad.data.usb.TinyRadUsbManager
+import com.TinyRAD.data.models.*
+import com.TinyRAD.data.repository.AppLog
+import com.TinyRAD.data.repository.PreferencesRepository
+import com.TinyRAD.data.repository.RecordingRepository
+import com.TinyRAD.data.usb.TinyRadUsbManager
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -35,7 +35,7 @@ import kotlinx.coroutines.delay
 //
 // Additionally the device was extracted from the permission-result intent, but
 // on some ROMs it arrives null there — fall back to the remembered pending device.
-const val ACTION_USB_PERMISSION = "com.rfsat.tinyrad.USB_PERMISSION"
+const val ACTION_USB_PERMISSION = "com.TinyRAD.USB_PERMISSION"
 
 class TinyRadViewModel(application: Application) : AndroidViewModel(application) {
 

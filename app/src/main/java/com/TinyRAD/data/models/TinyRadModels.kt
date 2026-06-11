@@ -1,4 +1,4 @@
-package com.rfsat.tinyrad.data.models
+package com.TinyRAD.data.models
 
 // ─── Radar operating mode ─────────────────────────────────────────────────────
 

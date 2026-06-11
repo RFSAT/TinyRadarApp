@@ -1,4 +1,4 @@
-package com.rfsat.tinyrad.ui.screens
+package com.TinyRAD.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -16,9 +16,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.rfsat.tinyrad.data.models.TinyRadConfig
-import com.rfsat.tinyrad.ui.theme.*
-import com.rfsat.tinyrad.viewmodel.TinyRadViewModel
+import com.TinyRAD.data.models.TinyRadConfig
+import com.TinyRAD.ui.theme.*
+import com.TinyRAD.viewmodel.TinyRadViewModel
 
 @Composable
 fun SettingsScreen(
@@ -26,7 +26,7 @@ fun SettingsScreen(
     onBack:    () -> Unit
 ) {
     val state  by viewModel.uiState.collectAsState()
-    var cfg    by remember(state.config) { mutableStateOf<com.rfsat.tinyrad.data.models.TinyRadConfig>(state.config) }
+    var cfg    by remember(state.config) { mutableStateOf<com.TinyRAD.data.models.TinyRadConfig>(state.config) }
 
     Scaffold(
         topBar = {

@@ -1,4 +1,4 @@
-package com.rfsat.tinyrad.ui.screens
+package com.TinyRAD.ui.screens
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -29,9 +29,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.rfsat.tinyrad.data.models.*
-import com.rfsat.tinyrad.ui.theme.*
-import com.rfsat.tinyrad.viewmodel.TinyRadViewModel
+import com.TinyRAD.data.models.*
+import com.TinyRAD.ui.theme.*
+import com.TinyRAD.viewmodel.TinyRadViewModel
 import kotlin.math.*
 
 private enum class RadarViewMode(val label: String) {

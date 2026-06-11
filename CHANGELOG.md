@@ -698,3 +698,202 @@ Range-Doppler and Range-Time panels.
 `window.addFlags(FLAG_KEEP_SCREEN_ON)` in `MainActivity.onCreate()` prevents
 the display from dimming or locking while the app is in the foreground.
 `WAKE_LOCK` permission added to `AndroidManifest.xml`.
+
+---
+
+## [2.14] — 2026-06-10
+
+### Bug fixes — three compile errors in RadarScreen.kt
+
+**`Path.addArc` wrong signature**: Compose `Path.addArc` takes an
+`androidx.compose.ui.geometry.Rect` as the `oval` parameter, not named
+`left/top/right/bottom` arguments. Fixed to:
+`addArc(oval = Rect(cx-r, cy-r, cx+r, cy+r), startAngleDegrees = 180f, sweepAngleDegrees = 180f)`
+
+**`nativeCanvas` access pattern wrong**: `drawContext.canvas.nativeCanvas.apply { drawText(...) }`
+fails because `.apply` runs in `android.graphics.Canvas` scope but the compiler
+can't infer the receiver. Replaced all occurrences with `drawIntoCanvas { canvas -> }`
+(Compose's safe native canvas accessor) and explicit `canvas.nativeCanvas.drawText(...)` calls.
+
+**`Float.MIN_VALUE` is positive in Kotlin**: Range-Time `gMax` initialised with
+`Float.MIN_VALUE` (= smallest positive float) instead of `-Float.MAX_VALUE`.
+Fixed so the max-search works correctly.
+
+---
+
+## [2.15] — 2026-06-10
+
+### Configurable update rate + optimised default detection settings
+
+#### Update rate — code change required (not a settings-only fix)
+
+The bottleneck is the hardware chirp period: the board firmware is
+initialised with `StrtMeas: DspCmd=[1,1, 4_000_000, 128]` which sets each
+chirp to 40 ms. One complete original frame = 80 chirps × 40 ms = 3.2 s.
+This cannot be changed without modifying the firmware init sequence.
+
+**What was changed:**
+
+`CHIRPS_PER_FRAME` is no longer a hard-coded constant. It is now read from
+`config.chirpsPerFrame` (settable in Settings) on every frame boundary.
+`processFrame` now accepts `nChirps: Int` and sizes all FFT arrays accordingly.
+
+Effect on update rate (chirp period stays at 40 ms):
+
+| Chirps/frame | Frame time | Update rate |
+|---|---|---|
+| 4  | 160 ms | ~6.25 fps |
+| 8  | 320 ms | ~3.1 fps  |
+| **16** | **640 ms** | **~1.5 fps  ← new default** |
+| 32 | 1.3 s  | ~0.8 fps  |
+| 80 | 3.2 s  | ~0.3 fps  (original) |
+
+Fewer chirps = coarser Doppler resolution but faster display updates.
+For object detection (rather than precise velocity measurement), 16 chirps
+gives a good balance. The Settings screen now shows the expected fps next
+to the slider value.
+
+#### Optimised default detection settings
+
+Changed defaults in `TinyRadConfig` to cover the full 180° aperture and
+detect weaker returns:
+
+| Parameter | Old default | New default | Reason |
+|---|---|---|---|
+| `maxRangeM` | 50 m | **100 m** | Board spec: 100m for RCS=1m² |
+| `cfar_threshold` | 15 dB | **10 dB** | Catch weaker/edge returns |
+| `minSnrDb` | 10 dB | **8 dB** | Wider angular coverage |
+| `chirpsPerFrame` | 80 | **16** | ~1.5 fps update rate |
+
+The FMCW array is electronically steered across ±90° by the 4 Rx beamformer;
+the `azimuthDeg` assignment in detection currently defaults to 0° (boresight)
+because true DBF requires per-channel phase processing. The full 180° is
+covered by the hardware — azimuth estimation is a future enhancement.
+
+---
+
+## [3.0] — 2026-06-10  ★ Major release
+
+### (1) CI workflow v4 — release APK re-enabled
+- Debug APK built on every push/PR (unchanged)
+- Release APK now built on every push to `main`/`develop` (hardware validated)
+- Play Store AAB built only on `v*` tag pushes
+- GitHub Release created automatically on tag push
+- Signing via repository secrets: `KEYSTORE_BASE64`, `KEY_ALIAS`,
+  `KEY_PASSWORD`, `STORE_PASSWORD`. Graceful fallback to unsigned build if
+  secrets are absent.
+
+### (2) About screen version auto-updates
+`AboutScreen` now reads `BuildConfig.VERSION_NAME` at runtime instead of
+a hardcoded string, so it always matches the current build.
+
+### (3) Detection sensitivity — lower thresholds
+CFAR threshold lowered to **6 dB** (from 10), minimum SNR to **3 dB**
+(from 8), training cells reduced to 4. The classifier filters weak
+returns after detection, so a low threshold produces more detections
+without excessive false-alarm rate in practice.
+
+### (4) Improved object classification
+Complete rewrite of `classifyAndTrack`:
+- Speed-primary rules: >20 m/s → vehicle; 0.2–6 m/s within 30 m → human;
+  6–12 m/s → vehicle; stationary + high SNR → vehicle
+- Confidence now accounts for speed match to walking speed, range, and SNR
+- Track age-out extended to 3 s (from 2 s)
+- Direction (`AHEAD`/`BEHIND`) derived from Doppler sign rather than
+  always `AHEAD`
+- Track matching uses range-resolution-relative threshold (`2 × rangeResM`)
+  instead of hard-coded 2 m
+
+### (5) Scanning / Tracking operating modes
+`RadarOperatingMode` enum with `SCANNING` and `TRACKING` states added to
+`TinyRadModels` and `TinyRadUiState`.
+
+State machine in `observeFrames` (ViewModel):
+- **SCANNING** → **TRACKING**: first frame with ≥1 detection; acquires
+  strongest-SNR object as track target
+- **TRACKING** → stays TRACKING: target track ID still visible
+- **TRACKING** → re-acquires: original target lost but other objects present
+- **TRACKING** → **SCANNING**: no detections in the frame
+
+`RadarScreen` top bar shows a colour-coded pill (cyan = SCANNING,
+orange = TRACKING) with target range/speed when tracking. An **Override**
+button appears only in TRACKING mode and calls `viewModel.overrideToScanning()`
+to force an immediate return to SCANNING.
+
+### (6) Version bump to 3.0
+First release with end-to-end validated USB communication, ADC data
+reception, DSP processing, object detection, and display.
+
+---
+
+## [3.0.1] — 2026-06-10
+
+### Bug fix
+
+- **`recordingPath` removed from `TinyRadUiState`** in v3.0 (field was in the
+  old duplicate tail that was deleted), but `startRecording()` in
+  `TinyRadViewModel` still called `.copy(recordingPath = path, ...)`.
+  Removed the `recordingPath` named argument from that `.copy()` call.
+
+---
+
+## [3.0.2] — 2026-06-11
+
+### CI workflow v5 — release-only builds
+
+- **Debug APK job removed** entirely.
+- `build-release` now runs on every push to `main`/`develop` and all tags,
+  building both the release APK (`assembleRelease`) and the Play Store AAB
+  (`bundleRelease`) in a single job.
+- Both artifacts uploaded with 90-day retention.
+- `github-release` job unchanged — creates a GitHub Release on `v*` tag pushes,
+  attaching the signed release APK.
+- Pull requests still skip the build (signing secrets unavailable in fork PRs).
+
+---
+
+## [3.0.3] — 2026-06-11
+
+### Bug fixes — release APK and AAB were not being built
+
+Two root causes:
+
+**1. `build.gradle` signing config crashed when env vars absent**
+The old guard `if (ksPath)` only checked the path, so when `ksPath` was
+set but the other three vars were empty, `file("")` was called and Gradle
+threw a configuration-phase exception — before any task ran.  Fixed: all
+four vars must be non-empty before the keystore block is entered.  The
+`hasKeystore` check in `buildTypes.release` likewise requires all four.
+
+**2. Workflow `if: github.event_name != 'pull_request'` skipped the job**
+The guard was intended to protect signing secrets in fork PRs but it
+silently skipped the job on every non-tag push as well (due to event
+classification).  Removed — the build now runs unconditionally.  If the
+`KEYSTORE_BASE64` secret is absent the build proceeds with the debug key
+(via the `build.gradle` fallback) and still produces a valid artifact.
+
+**Workflow v6 summary:**
+- `build-release` runs on every push and PR — no conditions
+- Keystore decode is a `run:` step that sets `KEYSTORE_PATH` env var only
+  when `KEYSTORE_BASE64` is present; otherwise prints a notice and continues
+- Both `assembleRelease` (APK) and `bundleRelease` (AAB) always built
+- Artifacts uploaded as separate named items with 90-day retention
+- `github-release` unchanged — fires on `v*` tags only
+
+---
+
+## [3.0.4] — 2026-06-11
+
+### Package name changed to com.TinyRAD
+
+Google Play Store requires the package name `com.TinyRAD`.
+
+Changed in all locations:
+- `build.gradle`: `namespace` and `applicationId`
+- All 17 Kotlin source files: `package` declarations and `import` statements
+- `AndroidManifest.xml`: any explicit package references
+- Source directory moved from `com/rfsat/tinyrad/` → `com/TinyRAD/`
+- `BuildConfig` reference in `AboutScreen` updated to `com.TinyRAD.BuildConfig`
+
+`FileProvider` authority uses `${applicationId}.fileprovider` (unchanged — 
+resolves at build time from `applicationId`).

@@ -1,9 +1,9 @@
-package com.rfsat.tinyrad.data.usb
+package com.TinyRAD.data.usb
 
 import android.content.Context
 import android.hardware.usb.*
-import com.rfsat.tinyrad.data.models.*
-import com.rfsat.tinyrad.data.repository.AppLog
+import com.TinyRAD.data.models.*
+import com.TinyRAD.data.repository.AppLog
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow

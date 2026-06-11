@@ -1,4 +1,4 @@
-package com.rfsat.tinyrad.ui.screens
+package com.TinyRAD.ui.screens
 
 import android.content.Intent
 import android.net.Uri
@@ -27,10 +27,10 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.rfsat.tinyrad.data.repository.AppLog
-import com.rfsat.tinyrad.data.repository.LogEntry
-import com.rfsat.tinyrad.data.repository.LogLevel
-import com.rfsat.tinyrad.ui.theme.*
+import com.TinyRAD.data.repository.AppLog
+import com.TinyRAD.data.repository.LogEntry
+import com.TinyRAD.data.repository.LogLevel
+import com.TinyRAD.ui.theme.*
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
@@ -256,7 +256,7 @@ fun AboutScreen(onBack: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text("TinyRAD", fontWeight = FontWeight.Bold, color = RadarAccent, fontSize = 28.sp)
-            Text("v${com.rfsat.tinyrad.BuildConfig.VERSION_NAME}",
+            Text("v${com.TinyRAD.BuildConfig.VERSION_NAME}",
                 color = RadarOnSurface.copy(alpha = 0.6f))
             Text("FMCW Radar Object Detection", color = RadarOnSurface, fontSize = 13.sp)
 
