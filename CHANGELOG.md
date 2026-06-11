@@ -897,3 +897,18 @@ Changed in all locations:
 
 `FileProvider` authority uses `${applicationId}.fileprovider` (unchanged — 
 resolves at build time from `applicationId`).
+
+---
+
+## [3.0.5] — 2026-06-11
+
+### Bug fix — BuildConfig unresolved after package rename
+
+`com.TinyRAD.BuildConfig.VERSION_NAME` used a fully-qualified path that
+only resolves if the Gradle namespace exactly matches. Replaced with
+`BuildConfig.VERSION_NAME` and an explicit `import com.TinyRAD.BuildConfig`
+so it compiles regardless of how the namespace is resolved at build time.
+
+Note: if GitHub Actions still reports the old `com/rfsat/` path, the
+repository source tree needs to be updated — copy the new `com/TinyRAD/`
+directory structure from this package and delete `com/rfsat/` from the repo.
