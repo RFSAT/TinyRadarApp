@@ -849,3 +849,33 @@ reception, DSP processing, object detection, and display.
 - `github-release` job unchanged — creates a GitHub Release on `v*` tag pushes,
   attaching the signed release APK.
 - Pull requests still skip the build (signing secrets unavailable in fork PRs).
+
+---
+
+## [3.0.3] — 2026-06-11
+
+### Bug fixes — release APK and AAB were not being built
+
+Two root causes:
+
+**1. `build.gradle` signing config crashed when env vars absent**
+The old guard `if (ksPath)` only checked the path, so when `ksPath` was
+set but the other three vars were empty, `file("")` was called and Gradle
+threw a configuration-phase exception — before any task ran.  Fixed: all
+four vars must be non-empty before the keystore block is entered.  The
+`hasKeystore` check in `buildTypes.release` likewise requires all four.
+
+**2. Workflow `if: github.event_name != 'pull_request'` skipped the job**
+The guard was intended to protect signing secrets in fork PRs but it
+silently skipped the job on every non-tag push as well (due to event
+classification).  Removed — the build now runs unconditionally.  If the
+`KEYSTORE_BASE64` secret is absent the build proceeds with the debug key
+(via the `build.gradle` fallback) and still produces a valid artifact.
+
+**Workflow v6 summary:**
+- `build-release` runs on every push and PR — no conditions
+- Keystore decode is a `run:` step that sets `KEYSTORE_PATH` env var only
+  when `KEYSTORE_BASE64` is present; otherwise prints a notice and continues
+- Both `assembleRelease` (APK) and `bundleRelease` (AAB) always built
+- Artifacts uploaded as separate named items with 90-day retention
+- `github-release` unchanged — fires on `v*` tags only

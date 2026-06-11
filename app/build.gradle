@@ -13,8 +13,8 @@ android {
         applicationId "com.rfsat.TinyRadApp"
         minSdk 26
         targetSdk 35
-        versionCode 32
-        versionName "3.0.2"
+        versionCode 33
+        versionName "3.0.3"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -28,7 +28,8 @@ android {
             def ksAlias     = System.getenv("KEY_ALIAS")       ?: project.findProperty("KEY_ALIAS")       ?: ""
             def ksKeyPass   = System.getenv("KEY_PASSWORD")    ?: project.findProperty("KEY_PASSWORD")    ?: ""
             def ksStorePass = System.getenv("STORE_PASSWORD")  ?: project.findProperty("STORE_PASSWORD")  ?: ""
-            if (ksPath) {
+            // Only configure if all four values are present — avoids file("") crash
+            if (ksPath && ksAlias && ksKeyPass && ksStorePass) {
                 storeFile     file(ksPath)
                 keyAlias      = ksAlias
                 keyPassword   = ksKeyPass
@@ -46,7 +47,9 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            def hasKeystore = System.getenv("KEYSTORE_PATH") || project.findProperty("KEYSTORE_PATH")
+            // Use release signing if keystore env vars are set; otherwise fall back to debug key
+            def hasKeystore = System.getenv("KEYSTORE_PATH") && System.getenv("KEY_ALIAS") &&
+                              System.getenv("KEY_PASSWORD")  && System.getenv("STORE_PASSWORD")
             signingConfig hasKeystore ? signingConfigs.release : signingConfigs.debug
         }
     }
