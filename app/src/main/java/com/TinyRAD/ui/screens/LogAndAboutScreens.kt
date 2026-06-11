@@ -326,7 +326,7 @@ private fun AboutLinkRow(label: String, value: String, url: String, onOpen: () -
             )
             Spacer(Modifier.width(4.dp))
             Icon(
-                Icons.Default.OpenInNew,
+                Icons.AutoMirrored.Filled.OpenInNew,
                 contentDescription = "Open in browser",
                 tint     = RadarAccent.copy(alpha = 0.7f),
                 modifier = Modifier.size(13.dp)
