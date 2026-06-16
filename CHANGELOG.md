@@ -912,3 +912,19 @@ so it compiles regardless of how the namespace is resolved at build time.
 Note: if GitHub Actions still reports the old `com/rfsat/` path, the
 repository source tree needs to be updated — copy the new `com/TinyRAD/`
 directory structure from this package and delete `com/rfsat/` from the repo.
+
+---
+
+## [3.0.8] — 2026-06-15
+
+### About screen — expanded descriptions
+
+Resolves Google Play Console "Metadata policy: Identical title and
+description" warning by giving the app a substantive description
+(separate from the store listing title/description, which must also
+be updated in Play Console).
+
+- Added a full justified paragraph describing TinyRAD's purpose,
+  the EV-TINYRAD24G hardware, and its object classification features.
+- Added a justified paragraph introducing the developer, RFSAT Limited,
+  based on its public web profile.

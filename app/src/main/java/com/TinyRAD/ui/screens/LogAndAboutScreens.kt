@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -262,6 +263,20 @@ fun AboutScreen(onBack: () -> Unit) {
                 color = RadarOnSurface.copy(alpha = 0.6f))
             Text("FMCW Radar Object Detection", color = RadarOnSurface, fontSize = 13.sp)
 
+            Text(
+                "TinyRAD turns your Android phone into a portable FMCW radar monitor for " +
+                "the Analog Devices EV-TINYRAD24G evaluation board, connected via USB-OTG. " +
+                "It streams live range/Doppler data from the radar's onboard firmware and " +
+                "classifies detected objects in real time — distinguishing humans, animals, " +
+                "ground vehicles and aerial vehicles. The app provides live visualisation, " +
+                "an event log and detection history, making it a handy field tool for " +
+                "researchers, engineers and hobbyists evaluating 24 GHz FMCW radar hardware.",
+                color     = RadarOnSurface.copy(alpha = 0.85f),
+                fontSize  = 12.sp,
+                textAlign = TextAlign.Justify,
+                modifier  = Modifier.fillMaxWidth()
+            )
+
             HorizontalDivider(color = RadarSurface)
 
             // Clickable RFSAT row
@@ -270,6 +285,19 @@ fun AboutScreen(onBack: () -> Unit) {
                 value  = "RFSAT Limited",
                 url    = "https://www.rfsat.com",
                 onOpen = { openUrl("https://www.rfsat.com") }
+            )
+
+            Text(
+                "RFSAT Limited (Research for Science, Art and Technology) is a non-profit " +
+                "R&D SME based in Dublin, Ireland, with a research office in Athens, Greece. " +
+                "It carries out applied research and technology development under national " +
+                "and EU funding programmes — including Horizon Europe — spanning digital " +
+                "signal processing, micro-embedded sensing, autonomous systems, GNSS " +
+                "positioning, and environmental and e-Health monitoring.",
+                color     = RadarOnSurface.copy(alpha = 0.6f),
+                fontSize  = 11.sp,
+                textAlign = TextAlign.Justify,
+                modifier  = Modifier.fillMaxWidth()
             )
 
             // Clickable Analog Devices row
