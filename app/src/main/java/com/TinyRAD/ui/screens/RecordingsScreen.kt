@@ -33,6 +33,9 @@ fun RecordingsScreen(viewModel: TinyRadViewModel, onBack: () -> Unit, onViewFile
     var deleteTarget by remember { mutableStateOf<File?>(null) }
 
     Scaffold(
+        // Insets are already consumed by the root Scaffold in MainActivity.
+        // Without this, system-bar insets would be applied twice (edge-to-edge bug).
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title  = { Text("Recordings") },

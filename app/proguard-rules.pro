@@ -1,51 +1,34 @@
-# ── ShimmerENACT ProGuard / R8 rules ─────────────────────────────────────────
+# ── TinyRAD — R8 / ProGuard rules ────────────────────────────────────────────
+#
+# REWRITTEN IN v3.2.0.
+#
+# The previous contents of this file were copied verbatim from an unrelated
+# project ("ShimmerENACT") and kept packages that do not exist in TinyRAD
+# (com.rfsat.shimmerenact.**), libraries that are not dependencies (osmdroid,
+# MPAndroidChart, OkHttp, protobuf), and a blanket rule that kept every
+# @Composable class with all of its members. Over-broad and stale keep rules
+# are exactly what the Play Console flags as "your R8 configuration could be
+# causing higher memory usage and lower performance": every kept class is a
+# class R8 may not shrink, inline, or repackage.
+#
+# TinyRAD uses NO reflection, NO serialisation libraries and NO dynamic
+# resource lookup, so it needs almost no keep rules. Compose, DataStore,
+# Navigation and Lifecycle all ship their own consumer rules in their AARs.
+#
+# NOTE for AGP 9: android.r8.strictFullModeForKeepRules now defaults to true,
+# so "-keep class A" no longer implicitly keeps A's default constructor. Any
+# rule added below that needs the constructor must say so explicitly, e.g.
+# "-keep class A { <init>(); }".
 
-# Keep data model classes used in DataStore / serialisation
--keep class com.rfsat.shimmerenact.data.models.** { *; }
--keep class com.rfsat.shimmerenact.data.repository.** { *; }
-
-# Keep BT protocol constants (accessed via reflection in some cases)
--keep class com.rfsat.shimmerenact.data.bluetooth.ShimmerProtocol { *; }
--keep class com.rfsat.shimmerenact.data.bluetooth.CalibrationParams { *; }
-
-# Jetpack Compose — R8 handles most of this automatically with Kotlin metadata,
-# but keep the @Composable annotation processor output intact.
--keep @androidx.compose.runtime.Composable class * { *; }
--keepclassmembers class * {
-    @androidx.compose.runtime.Composable <methods>;
-}
-
-# MPAndroidChart — uses reflection for animations
--keep class com.github.mikephil.charting.** { *; }
-
-# OkHttp (pulled in transitively) — suppress irrelevant warnings
--dontwarn okhttp3.**
--dontwarn okio.**
-
-# Kotlin coroutines / serialisation metadata
+# Preserve crash-report readability. SourceFile + LineNumberTable let Play
+# Console and Android Studio retrace obfuscated stack traces via mapping.txt.
+-keepattributes SourceFile, LineNumberTable
 -keepattributes *Annotation*, InnerClasses, EnclosingMethod, Signature
--keepattributes SourceFile, LineNumberTable   # preserves crash stack traces
 
-# Remove verbose logging in release builds
+# Strip verbose/debug logging from release builds. AppLog routes user-facing
+# messages through its own file writer, so only the noisy android.util.Log
+# debug and verbose levels are removed; warn/error are retained.
 -assumenosideeffects class android.util.Log {
     public static int d(...);
     public static int v(...);
 }
-
-# DataStore Preferences
--keep class androidx.datastore.** { *; }
--keepclassmembers class * extends com.google.protobuf.GeneratedMessageLite {
-    <fields>;
-}
-
-# osmdroid — tile provider uses reflection; ContentProvider registered in merged
-# manifest must not be stripped or renamed by R8.
--keep class org.osmdroid.** { *; }
--dontwarn org.osmdroid.**
-
-# ShimmerBluetoothManager — coroutine lambdas and inner classes must be kept
-# so R8 does not mangle names referenced from the ViewModel coroutine scope.
--keep class com.rfsat.shimmerenact.data.bluetooth.ShimmerBluetoothManager { *; }
--keep class com.rfsat.shimmerenact.data.bluetooth.ShimmerBluetoothManager$* { *; }
--keep class com.rfsat.shimmerenact.viewmodel.ShimmerViewModel { *; }
--keep class com.rfsat.shimmerenact.viewmodel.ShimmerViewModel$* { *; }

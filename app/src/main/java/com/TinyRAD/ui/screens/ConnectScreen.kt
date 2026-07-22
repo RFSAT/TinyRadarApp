@@ -42,6 +42,9 @@ fun ConnectScreen(
     var devices by remember { mutableStateOf(usbManager.deviceList.values.toList()) }
 
     Scaffold(
+        // Insets are already consumed by the root Scaffold in MainActivity.
+        // Without this, system-bar insets would be applied twice (edge-to-edge bug).
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title  = { Text("Select USB Device") },

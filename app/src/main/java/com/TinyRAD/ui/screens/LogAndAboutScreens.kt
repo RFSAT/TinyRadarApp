@@ -58,6 +58,9 @@ fun LogScreen(onBack: () -> Unit) {
     }
 
     Scaffold(
+        // Insets are already consumed by the root Scaffold in MainActivity.
+        // Without this, system-bar insets would be applied twice (edge-to-edge bug).
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title  = { Text("Event Log") },
@@ -234,6 +237,9 @@ fun AboutScreen(onBack: () -> Unit) {
     }
 
     Scaffold(
+        // Insets are already consumed by the root Scaffold in MainActivity.
+        // Without this, system-bar insets would be applied twice (edge-to-edge bug).
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title  = { Text("About") },

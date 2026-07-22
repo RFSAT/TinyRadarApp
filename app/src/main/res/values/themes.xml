@@ -1,15 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--
-        Theme.TinyRadApp — API 36 / edge-to-edge edition
-        statusBarColor and navigationBarColor are intentionally omitted:
-        enableEdgeToEdge() (called in MainActivity.onCreate) manages the
-        system-bar colours automatically and those attributes are ignored
-        on API 35+ in edge-to-edge mode anyway.
+        Theme.TinyRadApp — API 36 / edge-to-edge edition.
+
+        Parent is the PLATFORM theme, not Theme.AppCompat or Theme.Material3:
+        TinyRAD is a 100% Jetpack Compose app, so neither androidx.appcompat nor
+        com.google.android.material is needed. Dropping them also removes
+        com.google.android.material.internal.EdgeToEdgeUtils and
+        BottomSheetDialog from the APK — both documented sources of the Play
+        Console "deprecated APIs for edge-to-edge" warning
+        (Window.setStatusBarColor / Window.setNavigationBarColor).
+
+        statusBarColor / navigationBarColor are deliberately NOT set here:
+        they are deprecated in Android 15 and ignored under edge-to-edge.
+        All colouring is done by Compose; enableEdgeToEdge() in MainActivity
+        handles the system-bar treatment.
     -->
-    <style name="Theme.TinyRadApp" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.TinyRadApp" parent="@android:style/Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/radar_dark</item>
     </style>
+
     <style name="Theme.TinyRadApp.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/radar_dark</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_icon</item>

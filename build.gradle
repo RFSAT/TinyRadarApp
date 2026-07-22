@@ -1,9 +1,23 @@
 // Top-level build file.
+//
+// AGP 9.0.1 is required by the Play Console recommendation
+// "Upgrade your Android Gradle plug-in to version 9.0 or higher".
+//
+// It is also a hard requirement independently of that: AGP 8.9 supports a
+// maximum compileSdk of API 35, so the API 36 target introduced in v3.0.9
+// cannot be built with the previous AGP 8.9.0.
+//
+// AGP 9.0 compatibility (from the official release notes):
+//   Gradle          >= 9.1.0   (see gradle/wrapper/gradle-wrapper.properties)
+//   SDK Build Tools >= 36.0.0
+//   JDK             >= 17
+//   Max API level      36.1
 plugins {
-    id 'com.android.application' version '8.9.0' apply false
-    id 'com.android.library' version '8.9.0' apply false
-    id 'org.jetbrains.kotlin.android' version '2.1.10' apply false
+    id 'com.android.application' version '9.0.1' apply false
+    id 'com.android.library'     version '9.0.1' apply false
+    // KGP 2.2.10 is the minimum AGP 9.0 depends on at runtime.
+    id 'org.jetbrains.kotlin.android' version '2.2.10' apply false
     // Compose compiler is bundled with Kotlin 2.0+ and managed via this plugin.
     // No separate kotlinCompilerExtensionVersion is needed.
-    id 'org.jetbrains.kotlin.plugin.compose' version '2.1.10' apply false
+    id 'org.jetbrains.kotlin.plugin.compose' version '2.2.10' apply false
 }

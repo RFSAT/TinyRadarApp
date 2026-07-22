@@ -1029,3 +1029,94 @@ The following API 36 features were reviewed for applicability:
   back to Home automatically.
 - Hiding the Log tab also returns the bottom bar to five items, which suits
   narrow devices better now that Exit has been added.
+
+---
+
+## [3.2.0] — 2026-07-22  ★ Play Console recommendations
+
+Addresses the three Play Console recommendations (edge-to-edge, deprecated
+edge-to-edge APIs, R8 optimisation).
+
+### (1) Edge-to-edge — insets were applied twice
+
+The real defect: the root `Scaffold` in `MainActivity` consumes system-bar
+insets and passes them to `NavHost` via `Modifier.padding(pad)`, but six
+screens (Connect, CsvViewer, Recordings, Settings, Log, About) each declare
+their **own** `Scaffold`, which by default consumes system-bar insets *again*.
+The result is doubled top/bottom padding under edge-to-edge.
+
+- All six nested Scaffolds now set `contentWindowInsets = WindowInsets(0,0,0,0)`,
+  so insets are consumed exactly once, by the root Scaffold.
+- `enableEdgeToEdge()` is retained in `MainActivity.onCreate()` for backward
+  compatibility on API 26–34, as the recommendation suggests.
+
+### (2) Deprecated edge-to-edge APIs
+
+`Window.setStatusBarColor`, `Window.setNavigationBarColor` and
+`LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES` are not called by TinyRAD's own
+code — they come from library internals. Sources removed or reduced:
+
+- **Removed `com.google.android.material`.** It was pulled in only by the XML
+  theme parent (`Theme.Material3.DayNight.NoActionBar`, introduced in 3.0.9).
+  Material Components' `EdgeToEdgeUtils.applyEdgeToEdge` and
+  `BottomSheetDialog.onCreate` are documented sources of exactly this warning.
+  `Theme.TinyRadApp` now inherits from the platform theme
+  `@android:style/Theme.Material.NoActionBar`.
+- **Removed `androidx.appcompat`** — unused; the activity extends
+  `ComponentActivity`, not `AppCompatActivity`.
+- **Replaced `SystemBarStyle`** in the `enableEdgeToEdge()` call with
+  `WindowCompat.getInsetsController(...)` +
+  `isAppearanceLightStatusBars/NavigationBars = false`. The `SystemBarStyle`
+  overload explicitly drives the deprecated colour setters; the insets
+  controller is the non-deprecated replacement.
+- **Upgraded `androidx.activity` 1.10.1 → 1.12.3.**
+
+CAVEAT: `androidx.activity` still contains pre-API-35 code paths that call the
+deprecated setters, and Play Console's analysis is static — it sees those
+methods in the DEX whether or not they can execute on a given device. A
+residual warning naming `androidx.activity` internals may therefore persist
+until AndroidX removes those paths upstream; it is benign.
+
+### (3) R8 optimisation
+
+- **AGP 8.9.0 → 9.0.1**, Gradle wrapper 8.11.1 → 9.1.0, KGP 2.1.10 → 2.2.10.
+  This was mandatory regardless of the recommendation: **AGP 8.9 supports a
+  maximum compileSdk of API 35**, so the API 36 target set in v3.0.9 could not
+  actually have been built with it.
+- **Optimised resource shrinking** is now active. From AGP 9.0 it is applied
+  automatically whenever `shrinkResources` is enabled (it already was), so no
+  flag is needed — `android.r8.optimizedResourceShrinking` defaults to true.
+- **`proguard-rules.pro` rewritten.** The previous file was copied verbatim
+  from an unrelated project and kept `com.rfsat.shimmerenact.**` (a package
+  that does not exist here), osmdroid, MPAndroidChart, OkHttp and protobuf
+  (none of them dependencies), plus a blanket
+  `-keep @androidx.compose.runtime.Composable class * { *; }` that pinned every
+  composable and its members. Verified that TinyRAD uses no reflection, so the
+  file now keeps only stack-trace attributes and strips debug logging.
+- **Removed five unused dependencies**: appcompat, material, MPAndroidChart,
+  opencsv, accompanist-permissions. None appeared anywhere in the source tree.
+  The jitpack repository (needed only by MPAndroidChart) was dropped from
+  `settings.gradle`.
+- `packagingOptions` renamed to `packaging`; `core-ktx` 1.15.0 → 1.17.0.
+
+### AGP 9 migration opt-outs (deferred work)
+
+AGP 9.0 flips `android.newDsl` and `android.builtInKotlin` to true. The new DSL
+is incompatible with the `org.jetbrains.kotlin.android` plugin this project
+applies, so both are opted out in `gradle.properties` to keep the existing
+Groovy build working:
+
+    android.newDsl=false
+    android.builtInKotlin=false
+
+**These opt-outs are removed in AGP 10.0 (mid-2026).** Migrating to built-in
+Kotlin and the new DSL should be scheduled as its own task.
+
+### Build verification required
+
+`core-ktx` was held at 1.17.0 rather than 1.18.0 deliberately: 1.18.0 is
+compiled against API 36.1, and AGP 9.0 requires consumers to use a compile SDK
+at least as high as the library's. Bumping it would require `compileSdk 36.1`.
+This release changes the toolchain substantially and has not been compiled in
+this environment — run a clean `assembleRelease` and smoke-test the release
+build before publishing.
