@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.TinyRadApp" parent="Theme.AppCompat.NoActionBar">
-        <item name="android:statusBarColor">@color/radar_dark</item>
-        <item name="android:navigationBarColor">@color/radar_dark</item>
+    <!--
+        Theme.TinyRadApp — API 36 / edge-to-edge edition
+        statusBarColor and navigationBarColor are intentionally omitted:
+        enableEdgeToEdge() (called in MainActivity.onCreate) manages the
+        system-bar colours automatically and those attributes are ignored
+        on API 35+ in edge-to-edge mode anyway.
+    -->
+    <style name="Theme.TinyRadApp" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="android:windowBackground">@color/radar_dark</item>
     </style>
     <style name="Theme.TinyRadApp.Splash" parent="Theme.SplashScreen">

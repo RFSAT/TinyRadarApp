@@ -928,3 +928,68 @@ be updated in Play Console).
   the EV-TINYRAD24G hardware, and its object classification features.
 - Added a justified paragraph introducing the developer, RFSAT Limited,
   based on its public web profile.
+
+---
+
+## [3.0.9] — 2026-07-22
+
+### Target API 36 (Android 16 / Baklava)
+
+**Required compliance changes**
+
+- `compileSdk` and `targetSdk` raised from 35 → 36.
+  `buildToolsVersion` updated to "36.0.0".
+
+- **Edge-to-edge (mandatory API 36):** `enableEdgeToEdge()` with
+  `SystemBarStyle.dark(TRANSPARENT)` called in `MainActivity.onCreate()`
+  before `setContent`. Removed explicit `android:statusBarColor` and
+  `android:navigationBarColor` from `themes.xml` (these conflict with
+  edge-to-edge and are ignored from API 35+ anyway). Theme base changed
+  from `Theme.AppCompat.NoActionBar` to `Theme.Material3.DayNight.NoActionBar`
+  for correct M3 defaults. The existing Scaffold + `WindowInsets` padding
+  already handles inset-aware layout correctly.
+
+- **Predictive back (mandatory API 36):** `android:enableOnBackInvokedCallback="true"`
+  added to `<application>` in AndroidManifest.xml. Navigation Compose's
+  `popBackStack()` / `navigate()` already use the OnBackInvokedDispatcher
+  internally, so no further code changes are required.
+
+- `android:appCategory="productivity"` added to `<application>`. This is
+  the correct category for a radar field-testing tool and ensures the app
+  is not misidentified as a game (which would bypass the API 36 adaptive
+  layout enforcement).
+
+**New API 36 features applicable to TinyRAD — none requiring new permissions**
+
+The following API 36 features were reviewed for applicability:
+
+- Richer haptics (`VibrationEffect` amplitude/frequency curves): the
+  existing `VIBRATE` permission already covers this. Could be used for
+  distance-aware haptic alerts (e.g., stronger buzz as a detected object
+  approaches). Not implemented in this release — noted for a future feature
+  release.
+
+- `ApplicationStartInfo.getStartComponent()`: useful for diagnosing
+  USB-triggered cold-start latency. No user-facing change; noted for
+  future diagnostics.
+
+- `JobScheduler#getPendingJobReasons()`: TinyRAD does not use
+  `JobScheduler`. Not applicable.
+
+- `Notification.ProgressStyle`: TinyRAD does not use ongoing
+  notifications for streaming. Not applicable.
+
+- Adaptive layouts / resizability: the app's Scaffold + Navigation Compose
+  layout already adapts gracefully to any window size. The `sw600dp`
+  behaviour change (apps fill the full window on large screens) is
+  compatible as-is.
+
+- Local Network Permission (enforcement deferred to 26Q2): TinyRAD
+  communicates exclusively over USB-OTG, not over the local network.
+  Not applicable; no `NEARBY_WIFI_DEVICES` permission required.
+
+- Health & fitness granular permissions: not used by TinyRAD.
+
+- Safer Intents (`intentMatchingFlags`): TinyRAD only receives the
+  `USB_DEVICE_ATTACHED` system broadcast, which is not affected by this
+  opt-in feature. Not applied.

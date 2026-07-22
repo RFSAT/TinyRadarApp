@@ -30,7 +30,9 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.TinyRadApp"
-        android:hardwareAccelerated="true">
+        android:hardwareAccelerated="true"
+        android:appCategory="productivity"
+        android:enableOnBackInvokedCallback="true">
 
         <activity
             android:name=".MainActivity"
