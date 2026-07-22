@@ -20,6 +20,8 @@ class PreferencesRepository(private val context: Context) {
         val MAX_SPEED     = floatPreferencesKey("max_speed_mps")
         val CFAR_THRESH   = floatPreferencesKey("cfar_threshold")
         val MIN_SNR       = floatPreferencesKey("min_snr_db")
+        // ── UI preferences (not radar hardware config) ────────────────────────
+        val HIDE_LOG_TAB  = booleanPreferencesKey("hide_log_tab")
     }
 
     val configFlow: Flow<TinyRadConfig> = context.dataStore.data.map { prefs ->
@@ -32,6 +34,19 @@ class PreferencesRepository(private val context: Context) {
             cfar_threshold= prefs[Keys.CFAR_THRESH]  ?: 15f,
             minSnrDb      = prefs[Keys.MIN_SNR]      ?: 10f
         )
+    }
+
+    /**
+     * UI preference: hide the "Log" tab from the bottom navigation bar.
+     * Kept separate from [configFlow] because it is a pure display preference
+     * and must never be pushed to the radar hardware.
+     */
+    val hideLogTabFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[Keys.HIDE_LOG_TAB] ?: false
+    }
+
+    suspend fun setHideLogTab(hide: Boolean) {
+        context.dataStore.edit { prefs -> prefs[Keys.HIDE_LOG_TAB] = hide }
     }
 
     suspend fun saveConfig(cfg: TinyRadConfig) {

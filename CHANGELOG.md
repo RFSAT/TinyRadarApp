@@ -993,3 +993,39 @@ The following API 36 features were reviewed for applicability:
 - Safer Intents (`intentMatchingFlags`): TinyRAD only receives the
   `USB_DEVICE_ATTACHED` system broadcast, which is not affected by this
   opt-in feature. Not applied.
+
+---
+
+## [3.1.0] — 2026-07-22  ★ New features
+
+### Version display on Home tab
+
+- The Home screen header now shows `Version <versionName>` beneath the
+  "FMCW Radar Object Detection" subtitle, read from `BuildConfig.VERSION_NAME`
+  so it tracks the Gradle version automatically.
+
+### Exit button in the tab bar
+
+- A sixth navigation item, **Exit**, has been added after **Settings**.
+- Tapping it opens a confirmation dialog (the message adapts to warn the
+  user when streaming is active) to prevent an accidental tap from killing
+  a live radar session.
+- Confirming calls the new `TinyRadViewModel.shutdown()`, which stops the
+  trigger loop, releases the USB interface and flushes the log file, then
+  calls `Activity.finishAndRemoveTask()` for a clean exit.
+
+### Hide "Log" tab option in Settings
+
+- New **Interface** section in Settings with a "Hide \"Log\" tab" switch.
+- Persisted via DataStore under a new `hide_log_tab` boolean key, exposed
+  as `PreferencesRepository.hideLogTabFlow` — kept deliberately separate
+  from `TinyRadConfig` so this display preference is never pushed to the
+  radar hardware.
+- The toggle applies immediately rather than waiting for the "Apply
+  Configuration" button, which only pushes RF/DSP settings.
+- Logging continues in the background when the tab is hidden; only the
+  navigation entry is removed.
+- If the Log tab is hidden while the Log screen is open, the app navigates
+  back to Home automatically.
+- Hiding the Log tab also returns the bottom bar to five items, which suits
+  narrow devices better now that Exit has been added.

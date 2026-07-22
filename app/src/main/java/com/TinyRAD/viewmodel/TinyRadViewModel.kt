@@ -46,6 +46,10 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
     private val _uiState = MutableStateFlow(TinyRadUiState())
     val uiState: StateFlow<TinyRadUiState> = _uiState.asStateFlow()
 
+    // ── UI preference: hide the Log tab in the bottom navigation bar ──────────
+    private val _hideLogTab = MutableStateFlow(false)
+    val hideLogTab: StateFlow<Boolean> = _hideLogTab.asStateFlow()
+
     private var frameSamples = ArrayDeque<Long>(20)
 
     // Remember the device we requested permission for so we can connect
@@ -115,6 +119,28 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
                 _uiState.update { it.copy(config = cfg) }
             }
         }
+        viewModelScope.launch {
+            prefRepo.hideLogTabFlow.collect { hide -> _hideLogTab.value = hide }
+        }
+    }
+
+    /** Persist the "hide Log tab" UI preference. Applies immediately. */
+    fun setHideLogTab(hide: Boolean) {
+        viewModelScope.launch {
+            prefRepo.setHideLogTab(hide)
+            AppLog.info("UI preference: hide Log tab = $hide")
+        }
+    }
+
+    /**
+     * Orderly shutdown used by the Exit button: stop the trigger loop, close
+     * the USB connection and flush the log file before the activity finishes.
+     */
+    fun shutdown() {
+        AppLog.info("Exit requested — shutting down")
+        stopStreaming()
+        usbManager.disconnect()
+        AppLog.close()
     }
 
     // ── USB connection ────────────────────────────────────────────────────────

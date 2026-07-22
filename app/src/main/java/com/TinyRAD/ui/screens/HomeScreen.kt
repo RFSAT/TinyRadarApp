@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.TinyRAD.BuildConfig
 import com.TinyRAD.data.models.UsbConnectionState
 import com.TinyRAD.ui.theme.*
 import com.TinyRAD.viewmodel.TinyRadViewModel
@@ -42,6 +43,11 @@ fun HomeScreen(
             "FMCW Radar Object Detection",
             fontSize = 14.sp,
             color    = RadarOnSurface.copy(alpha = 0.7f)
+        )
+        Text(
+            "Version ${BuildConfig.VERSION_NAME}",
+            fontSize = 12.sp,
+            color    = RadarOnSurface.copy(alpha = 0.45f)
         )
 
         Spacer(Modifier.height(8.dp))

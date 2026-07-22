@@ -11,6 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -26,6 +27,7 @@ fun SettingsScreen(
     onBack:    () -> Unit
 ) {
     val state  by viewModel.uiState.collectAsState()
+    val hideLogTab by viewModel.hideLogTab.collectAsState()
     var cfg    by remember(state.config) { mutableStateOf<com.TinyRAD.data.models.TinyRadConfig>(state.config) }
 
     Scaffold(
@@ -123,6 +125,35 @@ fun SettingsScreen(
                 }
                 SliderField("Threshold (dB)", cfg.cfar_threshold, 5f, 30f) {
                     cfg = cfg.copy(cfar_threshold = it)
+                }
+            }
+
+            Section("Interface") {
+                // UI preference — persisted immediately, independent of the
+                // "Apply Configuration" button (which pushes radar HW settings).
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Hide \"Log\" tab", color = RadarOnSurface, fontSize = 12.sp)
+                        Text(
+                            "Removes the Log tab from the bottom bar. Logging continues in the background.",
+                            color = RadarOnSurface.copy(alpha = 0.45f), fontSize = 10.sp
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(
+                        checked         = hideLogTab,
+                        onCheckedChange = { viewModel.setHideLogTab(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor   = RadarAccent,
+                            checkedTrackColor   = RadarAccent.copy(alpha = 0.4f),
+                            uncheckedThumbColor = RadarOnSurface.copy(alpha = 0.6f),
+                            uncheckedTrackColor = RadarSurface
+                        )
+                    )
                 }
             }
 

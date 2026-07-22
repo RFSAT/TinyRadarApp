@@ -1,5 +1,6 @@
 package com.TinyRAD
 
+import android.app.Activity
 import android.content.Intent
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
@@ -13,10 +14,12 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.IntentCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.navigation.NavType
@@ -84,8 +87,50 @@ fun TinyRadApp(viewModel: TinyRadViewModel) {
     val currentRoute   = currentEntry?.destination?.route
 
     val uiState     by viewModel.uiState.collectAsState()
+    val hideLogTab  by viewModel.hideLogTab.collectAsState()
     val isConnected  = uiState.connectionState == UsbConnectionState.CONNECTED
     val isStreaming  = uiState.isStreaming
+
+    val context      = LocalContext.current
+    var showExitDialog by remember { mutableStateOf(false) }
+
+    // If the user hides the Log tab while the Log screen is open, leave it.
+    LaunchedEffect(hideLogTab, currentRoute) {
+        if (hideLogTab && currentRoute == Screen.Log.route) {
+            navController.navigate(Screen.Home.route) {
+                popUpTo(0); launchSingleTop = true
+            }
+        }
+    }
+
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            containerColor   = RadarDarkMid,
+            title = { Text("Exit TinyRAD?", color = RadarOnSurface) },
+            text  = {
+                Text(
+                    if (isStreaming)
+                        "Streaming is active. Exiting will stop the radar and close the USB connection."
+                    else
+                        "This will close the USB connection and quit the application.",
+                    color = RadarOnSurface.copy(alpha = 0.7f)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showExitDialog = false
+                    viewModel.shutdown()
+                    (context as? Activity)?.finishAndRemoveTask()
+                }) { Text("Exit", color = RadarError) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitDialog = false }) {
+                    Text("Cancel", color = RadarOnSurface.copy(alpha = 0.7f))
+                }
+            }
+        )
+    }
 
     val bottomRoutes = listOf(
         Screen.Home.route, Screen.Radar.route,
@@ -129,21 +174,23 @@ fun TinyRadApp(viewModel: TinyRadViewModel) {
                             }
                         }
                     )
-                    val logEntries  by AppLog.entries.collectAsState()
-                    val errorCount  = remember(logEntries) {
-                        logEntries.count { it.level == LogLevel.ERROR }
-                    }
-                    NavItemBadged(
-                        selected    = currentRoute == Screen.Log.route,
-                        icon        = Icons.Default.Terminal,
-                        label       = "Log",
-                        badgeCount  = errorCount,
-                        onClick     = {
-                            navController.navigate(Screen.Log.route) {
-                                launchSingleTop = true
-                            }
+                    if (!hideLogTab) {
+                        val logEntries  by AppLog.entries.collectAsState()
+                        val errorCount  = remember(logEntries) {
+                            logEntries.count { it.level == LogLevel.ERROR }
                         }
-                    )
+                        NavItemBadged(
+                            selected    = currentRoute == Screen.Log.route,
+                            icon        = Icons.Default.Terminal,
+                            label       = "Log",
+                            badgeCount  = errorCount,
+                            onClick     = {
+                                navController.navigate(Screen.Log.route) {
+                                    launchSingleTop = true
+                                }
+                            }
+                        )
+                    }
                     NavItem(
                         selected = currentRoute == Screen.Settings.route,
                         icon     = Icons.Default.Settings,
@@ -153,6 +200,13 @@ fun TinyRadApp(viewModel: TinyRadViewModel) {
                                 launchSingleTop = true
                             }
                         }
+                    )
+                    // Exit — never "selected"; opens a confirmation dialog
+                    NavItem(
+                        selected = false,
+                        icon     = Icons.AutoMirrored.Filled.ExitToApp,
+                        label    = "Exit",
+                        onClick  = { showExitDialog = true }
                     )
                 }
             }
