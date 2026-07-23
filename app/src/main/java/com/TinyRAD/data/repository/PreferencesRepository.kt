@@ -22,6 +22,7 @@ class PreferencesRepository(private val context: Context) {
         val MIN_SNR       = floatPreferencesKey("min_snr_db")
         // ── UI preferences (not radar hardware config) ────────────────────────
         val HIDE_LOG_TAB  = booleanPreferencesKey("hide_log_tab")
+        val IMMERSIVE     = booleanPreferencesKey("immersive_mode")
     }
 
     val configFlow: Flow<TinyRadConfig> = context.dataStore.data.map { prefs ->
@@ -47,6 +48,20 @@ class PreferencesRepository(private val context: Context) {
 
     suspend fun setHideLogTab(hide: Boolean) {
         context.dataStore.edit { prefs -> prefs[Keys.HIDE_LOG_TAB] = hide }
+    }
+
+    /**
+     * UI preference: immersive full-screen mode — hides the status bar and the
+     * system navigation bar. Default false so the app behaves normally until
+     * the user opts in. Change the `?: false` below to `?: true` to make
+     * immersive mode the out-of-the-box default.
+     */
+    val immersiveModeFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[Keys.IMMERSIVE] ?: false
+    }
+
+    suspend fun setImmersiveMode(enabled: Boolean) {
+        context.dataStore.edit { prefs -> prefs[Keys.IMMERSIVE] = enabled }
     }
 
     suspend fun saveConfig(cfg: TinyRadConfig) {

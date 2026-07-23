@@ -36,32 +36,32 @@ fun RecordingsScreen(viewModel: TinyRadViewModel, onBack: () -> Unit, onViewFile
         // Insets are already consumed by the root Scaffold in MainActivity.
         // Without this, system-bar insets would be applied twice (edge-to-edge bug).
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                title  = { Text("Recordings") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
-                actions = {
-                    IconButton(onClick = { files = viewModel.listRecordings() }) {
-                        Icon(Icons.Default.Refresh, "Refresh", tint = RadarAccent)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor    = RadarDarkMid,
-                    titleContentColor = RadarOnSurface
-                )
-            )
-        },
+        // TopAppBar removed in v3.3.0. Recordings is a bottom-navigation tab,
+        // so the back arrow was redundant; the Refresh action had no other
+        // home in the UI and has been relocated to the compact row below.
         containerColor = RadarDark
     ) { pad ->
-        if (files.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
-                Text("No recordings yet", color = RadarOnSurface.copy(alpha = 0.4f))
-            }
-        } else {
-            LazyColumn(
-                modifier            = Modifier.padding(pad).padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+        Column(Modifier.fillMaxSize().padding(pad)) {
+
+            Row(
+                modifier              = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment     = Alignment.CenterVertically
             ) {
+                IconButton(onClick = { files = viewModel.listRecordings() }) {
+                    Icon(Icons.Default.Refresh, "Refresh", tint = RadarAccent)
+                }
+            }
+
+            if (files.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No recordings yet", color = RadarOnSurface.copy(alpha = 0.4f))
+                }
+            } else {
+                LazyColumn(
+                    modifier            = Modifier.padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                 items(files) { file ->
                     RecordingItem(
                         file     = file,
@@ -79,6 +79,7 @@ fun RecordingsScreen(viewModel: TinyRadViewModel, onBack: () -> Unit, onViewFile
                         onView   = { onViewFile(file.absolutePath) },
                         onDelete = { deleteTarget = file }
                     )
+                }
                 }
             }
         }

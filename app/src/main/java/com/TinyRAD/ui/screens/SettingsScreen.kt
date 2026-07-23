@@ -7,7 +7,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,35 +27,16 @@ fun SettingsScreen(
 ) {
     val state  by viewModel.uiState.collectAsState()
     val hideLogTab by viewModel.hideLogTab.collectAsState()
+    val immersiveMode by viewModel.immersiveMode.collectAsState()
     var cfg    by remember(state.config) { mutableStateOf<com.TinyRAD.data.models.TinyRadConfig>(state.config) }
 
     Scaffold(
         // Insets are already consumed by the root Scaffold in MainActivity.
         // Without this, system-bar insets would be applied twice (edge-to-edge bug).
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            @OptIn(ExperimentalMaterial3Api::class)
-            TopAppBar(
-                title  = { Text("Radar Settings") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        viewModel.applyConfig(cfg)
-                        onBack()
-                    }) {
-                        Icon(Icons.Default.Check, "Apply", tint = RadarAccent)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = RadarDarkMid,
-                    titleContentColor = RadarOnSurface
-                )
-            )
-        },
+        // TopAppBar removed in v3.3.0. Settings is a bottom-navigation tab, so
+        // the back arrow was redundant, and the check action duplicated the
+        // "Apply Configuration" button at the foot of the content below.
         containerColor = RadarDark
     ) { pad ->
         Column(
@@ -132,8 +112,33 @@ fun SettingsScreen(
             }
 
             Section("Interface") {
-                // UI preference — persisted immediately, independent of the
+                // UI preferences — persisted immediately, independent of the
                 // "Apply Configuration" button (which pushes radar HW settings).
+                Row(
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Full-screen mode", color = RadarOnSurface, fontSize = 12.sp)
+                        Text(
+                            "Hides the status bar and the system navigation bar. Swipe from a screen edge to reveal them briefly.",
+                            color = RadarOnSurface.copy(alpha = 0.45f), fontSize = 10.sp
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(
+                        checked         = immersiveMode,
+                        onCheckedChange = { viewModel.setImmersiveMode(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor   = RadarAccent,
+                            checkedTrackColor   = RadarAccent.copy(alpha = 0.4f),
+                            uncheckedThumbColor = RadarOnSurface.copy(alpha = 0.6f),
+                            uncheckedTrackColor = RadarSurface
+                        )
+                    )
+                }
+
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,

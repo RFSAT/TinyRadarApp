@@ -61,20 +61,9 @@ fun LogScreen(onBack: () -> Unit) {
         // Insets are already consumed by the root Scaffold in MainActivity.
         // Without this, system-bar insets would be applied twice (edge-to-edge bug).
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                title  = { Text("Event Log") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor    = RadarDarkMid,
-                    titleContentColor = RadarOnSurface
-                )
-            )
-        },
+        // TopAppBar removed in v3.3.0. Log is a bottom-navigation tab, so the
+        // back arrow was redundant and the bar carried no actions. The filter
+        // chip row below now serves as the visual header.
         containerColor = RadarDark
     ) { pad ->
         Column(modifier = Modifier.padding(pad)) {

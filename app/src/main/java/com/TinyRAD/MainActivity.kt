@@ -21,6 +21,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.IntentCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
@@ -54,11 +60,54 @@ class MainActivity : ComponentActivity() {
         AppLog.init(this)
         AppLog.info("TinyRadApp started")
         handleUsbIntent(intent)
+
+        // Apply immersive full-screen whenever the preference changes.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.immersiveMode.collect { applyImmersiveMode(it) }
+            }
+        }
+
         setContent {
             TinyRadAppTheme {
                 TinyRadApp(viewModel)
             }
         }
+    }
+
+    /**
+     * Immersive full-screen — hides the status bar and the system navigation
+     * bar ("toolbar" at the bottom of the screen).
+     *
+     * The legacy route (FLAG_FULLSCREEN / View.SYSTEM_UI_FLAG_*) is deprecated
+     * and, more importantly, is IGNORED outright for apps targeting SDK 35+
+     * under edge-to-edge enforcement. WindowInsetsControllerCompat is the only
+     * mechanism that still works on API 36.
+     *
+     * BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE lets the user swipe from a screen
+     * edge to bring the bars back temporarily; they auto-hide again after a
+     * short timeout. Without this the bars would be unreachable.
+     */
+    private fun applyImmersiveMode(enabled: Boolean) {
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (enabled) {
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+        } else {
+            controller.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    /**
+     * The system restores the bars whenever the window loses focus — an
+     * AlertDialog (such as the Exit confirmation) or the USB permission prompt
+     * is enough to trigger it. Re-apply once focus returns, or immersive mode
+     * silently switches itself off the first time a dialog appears.
+     */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) applyImmersiveMode(viewModel.immersiveMode.value)
     }
 
     override fun onNewIntent(intent: Intent) {

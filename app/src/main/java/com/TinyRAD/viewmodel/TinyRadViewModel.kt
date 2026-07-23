@@ -50,6 +50,10 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
     private val _hideLogTab = MutableStateFlow(false)
     val hideLogTab: StateFlow<Boolean> = _hideLogTab.asStateFlow()
 
+    // ── UI preference: immersive full-screen mode (hides system bars) ─────────
+    private val _immersiveMode = MutableStateFlow(false)
+    val immersiveMode: StateFlow<Boolean> = _immersiveMode.asStateFlow()
+
     private var frameSamples = ArrayDeque<Long>(20)
 
     // Remember the device we requested permission for so we can connect
@@ -122,6 +126,9 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             prefRepo.hideLogTabFlow.collect { hide -> _hideLogTab.value = hide }
         }
+        viewModelScope.launch {
+            prefRepo.immersiveModeFlow.collect { on -> _immersiveMode.value = on }
+        }
     }
 
     /** Persist the "hide Log tab" UI preference. Applies immediately. */
@@ -129,6 +136,14 @@ class TinyRadViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             prefRepo.setHideLogTab(hide)
             AppLog.info("UI preference: hide Log tab = $hide")
+        }
+    }
+
+    /** Persist the immersive full-screen UI preference. Applies immediately. */
+    fun setImmersiveMode(enabled: Boolean) {
+        viewModelScope.launch {
+            prefRepo.setImmersiveMode(enabled)
+            AppLog.info("UI preference: immersive full-screen = $enabled")
         }
     }
 

@@ -1120,3 +1120,71 @@ at least as high as the library's. Bumping it would require `compileSdk 36.1`.
 This release changes the toolchain substantially and has not been compiled in
 this environment — run a clean `assembleRelease` and smoke-test the release
 build before publishing.
+
+---
+
+## [3.3.0] — 2026-07-23  ★ Full-screen mode and header removal
+
+### Immersive full-screen mode (new Settings toggle)
+
+Why full-screen behaved differently under API 36: the legacy mechanisms
+(`WindowManager.LayoutParams.FLAG_FULLSCREEN`, `View.SYSTEM_UI_FLAG_*`,
+`setSystemUiVisibility`) are not merely deprecated — they are **ignored
+outright** for apps targeting SDK 35+ under edge-to-edge enforcement. Under
+edge-to-edge the app draws behind the system bars, but the bars themselves
+remain visible on top of the content.
+
+Hiding them is still fully supported; it just has to go through the modern
+API. Added to the **Interface** section of Settings:
+
+- New "Full-screen mode" switch, persisted via DataStore key `immersive_mode`,
+  exposed as `PreferencesRepository.immersiveModeFlow`. Applies immediately.
+- `MainActivity.applyImmersiveMode()` uses
+  `WindowInsetsControllerCompat.hide(WindowInsetsCompat.Type.systemBars())`,
+  which hides both the status bar and the bottom system navigation bar.
+- `systemBarsBehavior` is set to `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE` so the
+  user can swipe from a screen edge to reveal the bars briefly; they auto-hide
+  again. Without this the bars would be unreachable while immersive.
+- The preference is collected in a `repeatOnLifecycle(STARTED)` block so
+  toggling it takes effect without restarting the activity.
+- `onWindowFocusChanged` re-applies immersive mode when focus returns. The
+  system restores the bars on any focus loss — the Exit confirmation dialog or
+  the USB permission prompt is enough — so without this, immersive mode would
+  silently switch itself off the first time a dialog appeared.
+
+**Default is OFF** (`?: false` in `PreferencesRepository.immersiveModeFlow`).
+Change that single default to `?: true` to ship with full-screen enabled
+out of the box.
+
+Note: in desktop windowing mode (large screens / connected display) the
+system-drawn caption bar stays visible even in immersive mode. This is
+platform behaviour and cannot be overridden.
+
+### Removed screen headers
+
+The `TopAppBar` has been removed from the three bottom-navigation tabs that
+carried a redundant title and back arrow:
+
+- **"Radar Settings"** — the check/apply action in the bar duplicated the
+  "Apply Configuration" button at the foot of the content, so nothing is lost.
+- **"Recordings"** — the Refresh action had no other home in the UI and has
+  been relocated to a compact icon row at the top of the list.
+- **"Event Log"** — carried no actions; the filter chip row now serves as the
+  visual header.
+
+In all three cases the back arrow was redundant: these are tabs, reached from
+the bottom navigation bar, not pushed destinations.
+
+Headers are deliberately **retained** on About, Connect and CSV Viewer — those
+are pushed destinations reached from elsewhere, so their back arrow is the only
+way out.
+
+The now-unused `onBack` parameters on `RecordingsScreen` and `LogScreen` were
+left in place so the `NavHost` wiring in `MainActivity` is unchanged; they
+produce an unused-parameter warning only.
+
+### Build verification required
+
+Not compiled in this environment — run a clean `assembleRelease` and check the
+immersive toggle against a device with gesture navigation and one with
+3-button navigation.
